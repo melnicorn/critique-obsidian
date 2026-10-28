@@ -99,9 +99,18 @@ interface Region {
   to: number;
 }
 
-/** Ranges that must not start a mark: YAML frontmatter, fenced code blocks, inline code spans. */
+/** Ranges that must not start a mark: YAML frontmatter, fenced code blocks, inline code spans, HTML comments. */
 export function codeRegions(text: string): Region[] {
   const regions: Region[] = [];
+  // HTML comments (including the optional Critique agent header) are collected first and merged in order.
+  const comments: Region[] = [];
+  let c = 0;
+  while ((c = text.indexOf("<!--", c)) !== -1) {
+    const end = text.indexOf("-->", c + 4);
+    if (end === -1) break;
+    comments.push({ from: c, to: end + 3 });
+    c = end + 3;
+  }
   let pos = 0;
   // Frontmatter
   if (text.startsWith("---\n") || text.startsWith("---\r\n")) {
@@ -162,7 +171,8 @@ export function codeRegions(text: string): Region[] {
     pos = eol + 1;
   }
   if (fence) regions.push({ from: fence.from, to: text.length });
-  return regions;
+  if (!comments.length) return regions;
+  return [...regions, ...comments].sort((a, b) => a.from - b.from);
 }
 
 function inRegion(regions: Region[], pos: number): boolean {

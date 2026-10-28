@@ -9,5 +9,5 @@ if (!vault || !existsSync(join(vault, ".obsidian"))) {
 }
 const dest = join(vault, ".obsidian", "plugins", "critique");
 mkdirSync(dest, { recursive: true });
-for (const f of ["main.js", "manifest.json", "styles.css"]) cpSync(join("dist", f), join(dest, f));
+for (const f of ["main.js", "manifest.json", "styles.css", "SKILL.md"]) cpSync(join("dist", f), join(dest, f));
 console.log("Installed to", dest);

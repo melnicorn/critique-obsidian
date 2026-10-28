@@ -10,6 +10,7 @@ import type { CritiqueSettings } from "../settings";
 import { TYPE_ICON } from "../ui/dom";
 import { setIcon } from "obsidian";
 import { parseTimestamp, relativeTime } from "../time";
+import { findAgentHeader } from "../agent-header";
 
 export interface TrayItem {
   markId: number;
@@ -139,7 +140,25 @@ class MetaChipWidget extends WidgetType {
   }
 }
 
+class GuideChipWidget extends WidgetType {
+  eq(): boolean {
+    return true;
+  }
+  toDOM(): HTMLElement {
+    const s = document.createElement("span");
+    s.className = "cq-guide-chip";
+    setIcon(s, "bot");
+    s.appendChild(document.createTextNode("Critique agent guide"));
+    s.setAttribute("aria-label", "Hidden HTML comment that points AI agents at the Critique guide. Click into the line to see it.");
+    return s;
+  }
+  ignoreEvent(): boolean {
+    return false;
+  }
+}
+
 const arrowWidget = new ArrowWidget();
+const guideChip = new GuideChipWidget();
 
 function wantsIndicator(m: Mark, thread: Thread | null, s: CritiqueSettings): boolean {
   const isRoot = m.type === "comment" && !!thread && thread.comments[0] === m.id;
@@ -230,6 +249,12 @@ export function buildDecorations(state: EditorState, onTrayClick: TrayClickHandl
       items.push({ markId: m.id, type: m.type, count: thread ? thread.comments.length : 1, resolved: !!thread?.resolved, author: rootAuthor });
       trayByLine.set(m.line, items);
     }
+  }
+
+  // The agent guide header folds to a chip in Live Preview unless the cursor is on it.
+  if (lp) {
+    const h = findAgentHeader(parsed.text);
+    if (h && !touches(h.from, h.to)) ranges.push(Decoration.replace({ widget: guideChip }).range(h.from, h.to));
   }
 
   for (const [line, items] of trayByLine) {

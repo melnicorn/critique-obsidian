@@ -10,8 +10,8 @@
 #   - Latest tag minor < package.json minor         → bump to package.json minor, patch 0
 #   - Otherwise                                     → increment patch
 #
-# Release assets: main.js, manifest.json, styles.css (what Obsidian needs, individually) and
-# critique-{version}.tar.gz holding the same three files in a critique/ folder.
+# Release assets: main.js, manifest.json, styles.css (what Obsidian needs, individually), SKILL.md
+# (the agent guide) and critique-{version}.tar.gz holding all four in a critique/ folder.
 #
 # Secrets: GEMINI_API_KEY (optional) for AI release notes; without it GitHub's generated notes are used.
 # Variables: GEMINI_MODEL (optional) picks the Gemini model; defaults to gemini-3.1-flash-lite.
@@ -126,6 +126,7 @@ jobs:
             dist/main.js
             dist/manifest.json
             dist/styles.css
+            dist/SKILL.md
           if-no-files-found: error
 
   release:
@@ -154,7 +155,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p package/critique
-          cp dist/main.js dist/manifest.json dist/styles.css package/critique/
+          cp dist/main.js dist/manifest.json dist/styles.css dist/SKILL.md package/critique/
           tar -czf "critique-${VERSION}.tar.gz" -C package critique
           tar -tzf "critique-${VERSION}.tar.gz"
 
@@ -252,13 +253,13 @@ jobs:
             echo
             echo "**Minimum Obsidian version:** ${MIN_APP}"
             echo
-            echo "Install by copying \`main.js\`, \`manifest.json\` and \`styles.css\` into \`<vault>/.obsidian/plugins/critique/\`, or unpack \`critique-${VERSION}.tar.gz\` into \`<vault>/.obsidian/plugins/\`."
+            echo "Install by unpacking \`critique-${VERSION}.tar.gz\` into \`<vault>/.obsidian/plugins/\`, or by copying \`main.js\`, \`manifest.json\` and \`styles.css\` into \`<vault>/.obsidian/plugins/critique/\`. \`SKILL.md\` is the guide for AI agents."
             echo
             echo "---"
             echo
           } > final_notes.md
 
-          ASSETS=(dist/main.js dist/manifest.json dist/styles.css "critique-${VERSION}.tar.gz")
+          ASSETS=(dist/main.js dist/manifest.json dist/styles.css dist/SKILL.md "critique-${VERSION}.tar.gz")
           if [ -f release_notes.md ]; then
             cat release_notes.md >> final_notes.md
             gh release create "$TAG" "${ASSETS[@]}" --title "v${VERSION}" --notes-file final_notes.md

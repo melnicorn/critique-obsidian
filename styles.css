@@ -72,6 +72,10 @@ body {
 .cq-hide-marks-reading .markdown-preview-view .cq-hl-text { color: inherit; text-decoration: none; font-weight: inherit; }
 .cq-hide-marks-reading .markdown-preview-view .cq-mark { background: none; border: none; }
 
+/* ---------- Agent guide header chip ---------- */
+.cq-guide-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 8px; font-size: 0.75em; color: var(--text-muted); background: var(--background-modifier-hover); vertical-align: 1px; cursor: text; }
+.cq-guide-chip svg { width: 11px; height: 11px; }
+
 /* ---------- Comment chip (standalone thread) ---------- */
 .cq-chip { display: inline-flex; align-items: center; gap: 2px; vertical-align: -2px; margin: 0 1px; padding: 0 4px; height: 1.2em; border-radius: 6px; font-size: 0.72em; font-weight: 600; cursor: pointer; color: var(--cq-c, var(--cq-cmt)); background: color-mix(in srgb, var(--cq-c, var(--cq-cmt)) 16%, transparent); --cq-c: var(--cq-cmt); }
 .cq-color-authors .cq-chip { --cq-c: var(--cq-author, var(--cq-cmt)); }

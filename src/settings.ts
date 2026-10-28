@@ -1,6 +1,7 @@
 import { PluginSettingTab, Setting, type App } from "obsidian";
 import type CritiquePlugin from "./main";
 import type { TimestampPrecision } from "./time";
+import { DEFAULT_GUIDE_URL } from "./agent-header";
 
 export type MarkStyle = "highlight" | "underline" | "off";
 export type DeletionStyle = "strike-color" | "color" | "bold-color";
@@ -29,6 +30,9 @@ export interface CritiqueSettings {
   toolbarInReading: boolean;
   commentLabels: boolean;
   labels: string[];
+  /** Insert the one-line agent guide header when the first mark is added to a note. */
+  agentHeader: boolean;
+  agentGuideUrl: string;
   // Panel state, persisted for convenience.
   panelFilter: PanelFilter;
   panelMine: boolean;
@@ -57,6 +61,8 @@ export const DEFAULT_SETTINGS: CritiqueSettings = {
   toolbarInReading: true,
   commentLabels: false,
   labels: ["question", "suggestion", "issue", "praise"],
+  agentHeader: false,
+  agentGuideUrl: DEFAULT_GUIDE_URL,
   panelFilter: "all",
   panelMine: false,
   panelShowResolved: false,
@@ -285,6 +291,26 @@ export class CritiqueSettingTab extends PluginSettingTab {
           }),
         );
     }
+
+    new Setting(containerEl).setName("Agents").setHeading();
+    new Setting(containerEl)
+      .setName("Add agent guide header to reviewed notes")
+      .setDesc("When the first mark is added to a note, insert a one-line HTML comment after the frontmatter that tells an AI agent how the marks work and links to the guide. Removed again when the last mark goes. Hidden in Live Preview and Reading mode.")
+      .addToggle((t) =>
+        t.setValue(s.agentHeader).onChange((v) => {
+          s.agentHeader = v;
+          save();
+        }),
+      );
+    new Setting(containerEl)
+      .setName("Agent guide URL")
+      .setDesc("Linked from the header. The same guide ships with the plugin as SKILL.md.")
+      .addText((t) =>
+        t.setValue(s.agentGuideUrl).onChange((v) => {
+          s.agentGuideUrl = v.trim() || DEFAULT_GUIDE_URL;
+          save();
+        }),
+      );
 
     new Setting(containerEl).setName("Review panel and safety").setHeading();
     new Setting(containerEl).setName("Panel location").addDropdown((d) =>

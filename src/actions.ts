@@ -9,6 +9,7 @@ import { formatTimestamp } from "./time";
 import type { MarkType } from "./syntax";
 import type CritiquePlugin from "./main";
 import { confirm } from "./ui/confirm";
+import { hasAgentHeader, insertAgentHeader, removeAgentHeader } from "./agent-header";
 
 export interface Target {
   file: TFile | null;
@@ -104,8 +105,42 @@ export class Actions {
 
   // ---------- High-level actions. `parsed` is the parse the caller is holding; edits are rebased. ----------
 
-  decide(t: Target, parsed: ParseResult, mark: Mark, decision: Decision): Promise<boolean> {
-    return this.apply(t, ops.decideMark(parsed.text, parsed, mark, decision));
+  async decide(t: Target, parsed: ParseResult, mark: Mark, decision: Decision): Promise<boolean> {
+    const ok = await this.apply(t, ops.decideMark(parsed.text, parsed, mark, decision));
+    if (ok) await this.cleanupHeader(t);
+    return ok;
+  }
+
+  /** With the agent header option on, drop the header once a note has no marks left. */
+  private async cleanupHeader(t: Target): Promise<void> {
+    if (!this.plugin.settings.agentHeader) return;
+    const text = await this.readText(t);
+    if (text === null || !hasAgentHeader(text) || parse(text).marks.length) return;
+    const e = removeAgentHeader(text);
+    if (e) await this.apply(t, [e]);
+  }
+
+  /** Insert the agent header into a note by hand. */
+  async addHeader(t: Target): Promise<boolean> {
+    const text = await this.readText(t);
+    if (text === null) return false;
+    const e = insertAgentHeader(text, this.plugin.settings.agentGuideUrl);
+    if (!e) {
+      new Notice("Critique: this note already has the agent guide header.");
+      return false;
+    }
+    return this.apply(t, [e]);
+  }
+
+  async removeHeader(t: Target): Promise<boolean> {
+    const text = await this.readText(t);
+    if (text === null) return false;
+    const e = removeAgentHeader(text);
+    if (!e) {
+      new Notice("Critique: this note has no agent guide header.");
+      return false;
+    }
+    return this.apply(t, [e]);
   }
 
   async decideAll(t: Target, parsed: ParseResult, decision: Decision, confirmFirst = true): Promise<boolean> {
@@ -118,7 +153,9 @@ export class Actions {
       const ok = await confirm(this.app, decision === "accept" ? "Accept all changes?" : "Reject all changes?", `${edits.length} change${edits.length === 1 ? "" : "s"} in this note will be ${decision === "accept" ? "accepted" : "rejected"}. Comments attached to them are removed; standalone comments stay.`, decision === "accept" ? "Accept all" : "Reject all");
       if (!ok) return false;
     }
-    return this.apply(t, edits);
+    const ok = await this.apply(t, edits);
+    if (ok) await this.cleanupHeader(t);
+    return ok;
   }
 
   async deleteComment(t: Target, parsed: ParseResult, mark: Mark): Promise<boolean> {
@@ -126,7 +163,9 @@ export class Actions {
       const ok = await confirm(this.app, "Delete comment?", "The comment is removed from the note.");
       if (!ok) return false;
     }
-    return this.apply(t, ops.deleteComment(parsed.text, parsed, mark));
+    const ok = await this.apply(t, ops.deleteComment(parsed.text, parsed, mark));
+    if (ok) await this.cleanupHeader(t);
+    return ok;
   }
 
   async deleteThread(t: Target, parsed: ParseResult, thread: Thread): Promise<boolean> {
@@ -135,7 +174,9 @@ export class Actions {
       const ok = await confirm(this.app, "Delete thread?", `${n} comment${n === 1 ? "" : "s"} will be removed from the note. A highlight anchor is unwrapped; a change stays.`);
       if (!ok) return false;
     }
-    return this.apply(t, ops.deleteThread(parsed.text, parsed, thread));
+    const ok = await this.apply(t, ops.deleteThread(parsed.text, parsed, thread));
+    if (ok) await this.cleanupHeader(t);
+    return ok;
   }
 
   setStatus(t: Target, parsed: ParseResult, thread: Thread, status: string | null): Promise<boolean> {
@@ -158,7 +199,20 @@ export class Actions {
       new Notice(`Critique: ${r.error}`);
       return false;
     }
-    return this.apply(t, r.edits, { cursor: r.cursor, select: r.select, focus });
+    const edits = [...r.edits];
+    let cursor = r.cursor;
+    let select = r.select;
+    // First mark in a note: add the agent guide header when the option is on.
+    if (this.plugin.settings.agentHeader && parsed.marks.length === 0) {
+      const h = insertAgentHeader(parsed.text, this.plugin.settings.agentGuideUrl);
+      if (h && !edits.some((e) => e.from < h.from && e.to > h.from)) {
+        edits.push(h);
+        const shift = (pos: number) => (h.from <= pos ? pos + h.insert.length : pos);
+        if (cursor !== undefined) cursor = shift(cursor);
+        if (select) select = { from: shift(select.from), to: shift(select.to) };
+      }
+    }
+    return this.apply(t, edits, { cursor, select, focus });
   }
 
   /** Copy text to the clipboard. */

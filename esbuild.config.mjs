@@ -42,6 +42,7 @@ const context = await esbuild.context({
 
 mkdirSync("dist", { recursive: true });
 for (const f of ["manifest.json", "styles.css"]) copyFileSync(f, `dist/${f}`);
+copyFileSync("skills/critique/SKILL.md", "dist/SKILL.md");
 
 if (prod) {
   await context.rebuild();

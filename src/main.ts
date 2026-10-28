@@ -14,6 +14,7 @@ import { CritiqueSettingTab, DEFAULT_SETTINGS, applySettingsToDocument, type Cri
 import { MARK_TYPES, type MarkType } from "./syntax";
 import { TYPE_ICON, TYPE_LABEL } from "./ui/dom";
 import { closeAllPopovers } from "./ui/popover";
+import { stripAgentHeader } from "./agent-header";
 import { ThreadPopovers } from "./ui/thread-popover";
 
 export default class CritiquePlugin extends Plugin {
@@ -173,11 +174,11 @@ export default class CritiquePlugin extends Plugin {
   }
 
   async copyPlain(parsed: ParseResult): Promise<void> {
-    await this.actions.copy(plainText(parsed.text, parsed, "accept"), "Note without markup");
+    await this.actions.copy(stripAgentHeader(plainText(parsed.text, parsed, "accept")), "Note without markup");
   }
 
   async copyStrict(parsed: ParseResult): Promise<void> {
-    await this.actions.copy(stripMetadata(parsed.text, parsed), "Strict CriticMarkup");
+    await this.actions.copy(stripAgentHeader(stripMetadata(parsed.text, parsed)), "Strict CriticMarkup");
   }
 
   private onCopy(ev: ClipboardEvent): void {
@@ -191,7 +192,7 @@ export default class CritiquePlugin extends Plugin {
     const p = parse(sel);
     if (!p.marks.length) return;
     ev.preventDefault();
-    ev.clipboardData?.setData("text/plain", plainText(sel, p, "accept"));
+    ev.clipboardData?.setData("text/plain", stripAgentHeader(plainText(sel, p, "accept")));
   }
 
   // ---------- Context menu ----------
@@ -319,13 +320,24 @@ export default class CritiquePlugin extends Plugin {
       editorCallback: (editor) => {
         const sel = editor.getSelection();
         const text = sel || editor.getValue();
-        void this.actions.copy(plainText(text, parse(text), "accept"), sel ? "Selection without markup" : "Note without markup");
+        void this.actions.copy(stripAgentHeader(plainText(text, parse(text), "accept")), sel ? "Selection without markup" : "Note without markup");
       },
     });
     this.addCommand({
       id: "copy-strict",
       name: "Copy note as strict CriticMarkup (no metadata)",
       editorCallback: (editor) => void this.copyStrict(parse(editor.getValue())),
+    });
+
+    this.addCommand({
+      id: "insert-agent-header",
+      name: "Insert agent guide header",
+      editorCallback: (editor, info) => void this.actions.addHeader({ file: info.file ?? null, editor }),
+    });
+    this.addCommand({
+      id: "remove-agent-header",
+      name: "Remove agent guide header",
+      editorCallback: (editor, info) => void this.actions.removeHeader({ file: info.file ?? null, editor }),
     });
 
     this.addCommand({
