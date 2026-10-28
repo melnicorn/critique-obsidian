@@ -78,4 +78,5 @@ prefix (`0.1.3`) because Obsidian requires the release tag to equal `manifest.js
 workflow stamps the computed version into the released manifest, so the repo copy keeps the floor.
 Each release attaches `main.js`, `manifest.json`, `styles.css` and `critique-<version>.tar.gz`.
 Release notes are written by Gemini when the `GEMINI_API_KEY` repository secret is set, and by
-GitHub's generated notes otherwise.
+GitHub's generated notes otherwise. The `GEMINI_MODEL` repository variable picks the model
+(default `gemini-3.1-flash-lite`).

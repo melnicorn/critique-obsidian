@@ -14,6 +14,7 @@
 # critique-{version}.tar.gz holding the same three files in a critique/ folder.
 #
 # Secrets: GEMINI_API_KEY (optional) for AI release notes; without it GitHub's generated notes are used.
+# Variables: GEMINI_MODEL (optional) picks the Gemini model; defaults to gemini-3.1-flash-lite.
 
 name: Build
 
@@ -169,6 +170,8 @@ jobs:
       - name: Generate release notes
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          # Repository variable GEMINI_MODEL overrides the model; the default applies when it is unset.
+          MODEL_ID:       ${{ vars.GEMINI_MODEL || 'gemini-3.1-flash-lite' }}
           PREVIOUS_TAG:   ${{ needs.build.outputs.previous_tag }}
         run: |
           set -e -E
@@ -178,7 +181,7 @@ jobs:
             exit 0
           fi
 
-          MODEL_ID="gemini-3.1-flash-lite"
+          echo "Using Gemini model: ${MODEL_ID}"
           GENERATE_CONTENT_API="generateContent"
 
           if [ -z "$PREVIOUS_TAG" ]; then
