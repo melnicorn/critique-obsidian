@@ -1,0 +1,801 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Critique Plugin Proposal</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Serif:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column (~70ch) for prose; mockups and tables may run to 1080px. Obsidian mockups are a fixed dark world inside theme-aware page chrome. */
+:root {
+  --bg: #f5f4fa; --surface: #ffffff; --surface-2: #eeecf6; --fg: #1b1826; --muted: #5f5b74; --line: #dad7e6;
+  --accent: #5b4bc4; --accent-soft: #e9e6fa;
+  --add: #1f8a4c; --del: #c73a3a; --hl: #b58500; --cmt: #2467b8;
+  --font-display: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Obsidian mockup world (always dark) */
+  --ob-bg: #1e1e1e; --ob-bg2: #262626; --ob-bg3: #2a2a2a; --ob-fg: #dadada; --ob-muted: #8a8a8a; --ob-faint: #5c5c5c; --ob-line: #383838;
+  --ob-accent: #7f6df2; --ob-sel: rgba(127,109,242,.32);
+  --ob-add: #7ee787; --ob-add-bg: rgba(63,185,80,.18);
+  --ob-del: #ff7b72; --ob-del-bg: rgba(248,81,73,.16);
+  --ob-hl-bg: rgba(227,179,65,.38);
+  --ob-cmt: #79b8ff; --ob-cmt-bg: rgba(88,166,255,.18);
+  --ob-font: "Inter", system-ui, -apple-system, sans-serif;
+  --ob-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14121d; --surface: #1c1928; --surface-2: #241f33; --fg: #ebe8f5; --muted: #a39ebc; --line: #2f2a42;
+    --accent: #a697ff; --accent-soft: #2a2544;
+    --add: #5fcf85; --del: #ff7b72; --hl: #e3b341; --cmt: #79b8ff;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14121d; --surface: #1c1928; --surface-2: #241f33; --fg: #ebe8f5; --muted: #a39ebc; --line: #2f2a42;
+  --accent: #a697ff; --accent-soft: #2a2544;
+  --add: #5fcf85; --del: #ff7b72; --hl: #e3b341; --cmt: #79b8ff;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 0 96px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.prose { max-width: 70ch; }
+h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 600; line-height: 1.2; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3rem); letter-spacing: -.01em; }
+h2 { font-size: 1.75rem; margin-top: 72px; padding-top: 24px; border-top: 1px solid var(--line); }
+h3 { font-size: 1.25rem; margin-top: 40px; }
+h4 { font-family: var(--font-body); font-weight: 600; font-size: 1rem; margin-top: 24px; }
+p { margin: 12px 0; }
+a { color: var(--accent); }
+ul, ol { padding-left: 1.3em; }
+li { margin: 4px 0; }
+code, kbd { font-family: var(--font-mono); font-size: .88em; background: var(--surface-2); padding: .1em .35em; border-radius: 4px; }
+kbd { border: 1px solid var(--line); border-bottom-width: 2px; }
+pre { font-family: var(--font-mono); font-size: .85rem; line-height: 1.55; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 14px 0; }
+pre code { background: none; padding: 0; font-size: inherit; }
+.eyebrow { font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.muted { color: var(--muted); }
+.small { font-size: .9rem; }
+
+/* header */
+header.hero { padding-block: 56px 32px; display: grid; gap: 14px; }
+header.hero .lede { font-size: 1.15rem; max-width: 62ch; color: var(--muted); }
+.meta-row { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: .9rem; color: var(--muted); }
+.meta-row b { color: var(--fg); font-weight: 500; }
+nav.toc { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); margin: 0 -16px; padding: 10px 16px; display: flex; gap: 4px 18px; flex-wrap: wrap; font-size: .85rem; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+nav.toc a { color: var(--muted); text-decoration: none; }
+nav.toc a:hover { color: var(--accent); }
+
+/* callouts and tables */
+.callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 12px 16px; border-radius: 0 8px 8px 0; margin: 18px 0; max-width: 70ch; }
+.callout.warn { border-color: var(--hl); background: color-mix(in srgb, var(--hl) 12%, var(--surface)); }
+.callout .eyebrow { margin-bottom: 4px; }
+.tablewrap { overflow-x: auto; margin: 16px 0; }
+table { border-collapse: collapse; width: 100%; font: inherit; font-size: .9rem; min-width: 560px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-weight: 600; font-size: .8rem; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+td code { white-space: nowrap; }
+.yes { color: var(--add); font-weight: 600; }
+.no { color: var(--muted); }
+.part { color: var(--hl); font-weight: 600; }
+.pill { display: inline-block; font-size: .72rem; font-weight: 600; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); vertical-align: middle; }
+.pill.p1 { background: color-mix(in srgb, var(--add) 18%, transparent); color: var(--add); }
+.pill.p2 { background: color-mix(in srgb, var(--cmt) 18%, transparent); color: var(--cmt); }
+.pill.p3 { background: color-mix(in srgb, var(--hl) 20%, transparent); color: var(--hl); }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 16px 0; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; min-width: 0; }
+.card h4 { margin-top: 0; }
+.card p { margin: 6px 0 0; font-size: .95rem; }
+
+.syntax-sample { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.sx { display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: baseline; padding: 8px 0; border-bottom: 1px dashed var(--line); }
+.sx .name { font-weight: 600; font-size: .9rem; }
+.sx code { white-space: pre-wrap; }
+@media (max-width: 520px) { .sx { grid-template-columns: 1fr; gap: 2px; } }
+
+/* figure + Obsidian mockup frame */
+figure { margin: 22px 0 34px; }
+figcaption { font-size: .86rem; color: var(--muted); margin-top: 10px; max-width: 70ch; }
+.ob { background: var(--ob-bg); color: var(--ob-fg); font-family: var(--ob-font); font-size: 14.5px; line-height: 1.6; border: 1px solid #000; border-radius: 10px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.35); }
+.ob.scroll { overflow-x: auto; }
+.ob-title { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; background: #161616; border-bottom: 1px solid #0a0a0a; font-size: 12px; color: var(--ob-muted); }
+.dots { display: flex; gap: 6px; }
+.dots i { width: 11px; height: 11px; border-radius: 50%; background: #3a3a3a; display: block; }
+.dots i:nth-child(1) { background: #ff5f57; } .dots i:nth-child(2) { background: #febc2e; } .dots i:nth-child(3) { background: #28c840; }
+.ob-title .t { margin-left: auto; margin-right: auto; }
+.ob-tabs { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; background: var(--ob-bg); border-bottom: 1px solid var(--ob-line); font-size: 13px; }
+.ob-tab { background: var(--ob-bg2); padding: 4px 12px; border-radius: 6px; color: var(--ob-fg); }
+.ob-tabs .mode { margin-left: auto; color: var(--ob-muted); font-size: 12px; display: flex; gap: 6px; align-items: center; }
+.ob-body { display: flex; min-height: 200px; }
+.ob-editor { flex: 1 1 auto; min-width: 0; padding: 22px 0 26px 36px; }
+.ob-editor.src { font-family: var(--ob-mono); font-size: 13px; line-height: 1.7; }
+.ln { display: flex; align-items: flex-start; gap: 8px; }
+.ln-text { flex: 1 1 auto; min-width: 0; max-width: 640px; padding-right: 8px; position: relative; }
+.ln-tray { flex: 0 0 44px; display: flex; justify-content: center; padding-top: 3px; }
+.ln + .ln { margin-top: 14px; }
+.ln.h2 .ln-text { font-size: 22px; font-weight: 600; line-height: 1.3; margin-bottom: 2px; }
+.ob-editor.src .ln.h2 .ln-text { font-size: 13px; font-weight: 500; }
+.ob-editor.src .ln + .ln { margin-top: 10px; }
+.ob-editor.src .ln-text { word-break: break-word; }
+
+/* mark rendering inside mockups */
+.m-add { color: var(--ob-add); background: var(--ob-add-bg); border-radius: 3px; padding: 0 2px; text-decoration: underline; text-decoration-color: rgba(126,231,135,.55); text-underline-offset: 3px; }
+.m-del { color: var(--ob-del); background: var(--ob-del-bg); border-radius: 3px; padding: 0 2px; text-decoration: line-through; text-decoration-thickness: 1.5px; }
+.m-sub .arrow { color: var(--ob-muted); font-size: 11px; margin: 0 2px; }
+.m-hl { background: var(--ob-hl-bg); border-radius: 3px; padding: 0 2px; }
+.m-cmt { background: var(--ob-cmt-bg); border-bottom: 2px dotted var(--ob-cmt); padding: 0 2px; border-radius: 3px 3px 0 0; }
+.m-cmt.focus { outline: 1.5px solid var(--ob-cmt); outline-offset: 1px; }
+.chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--ob-cmt); background: var(--ob-cmt-bg); border-radius: 999px; padding: 0 7px 0 5px; vertical-align: middle; margin-left: 2px; line-height: 18px; }
+/* source-mode syntax */
+.sy { color: var(--ob-faint); }
+.sy.a { color: rgba(126,231,135,.55); } .sy.d { color: rgba(255,123,114,.55); } .sy.h { color: rgba(227,179,65,.6); } .sy.c { color: rgba(121,184,255,.55); }
+.mt { color: var(--ob-muted); font-size: 11.5px; }
+.src .m-add, .src .m-del, .src .m-hl, .src .m-cmt { text-decoration: none; border-bottom: 0; }
+.src .m-del { text-decoration: line-through; }
+.src .m-cmt { color: var(--ob-cmt); background: var(--ob-cmt-bg); }
+.ob-cursor { display: inline-block; width: 1.5px; height: 1.1em; background: var(--ob-fg); vertical-align: text-bottom; margin-left: 1px; animation: blink 1.1s steps(2) infinite; }
+@media (prefers-reduced-motion: reduce) { .ob-cursor { animation: none; } }
+@keyframes blink { to { opacity: 0; } }
+
+/* indicator */
+.ind { display: inline-flex; align-items: center; gap: 3px; height: 22px; padding: 0 7px 0 5px; border-radius: 999px; background: var(--ob-bg3); border: 1px solid var(--ob-line); color: var(--ob-cmt); font-size: 11px; font-weight: 600; cursor: pointer; }
+.ind.active { border-color: var(--ob-cmt); background: var(--ob-cmt-bg); }
+.ind .ic { width: 13px; height: 13px; }
+.ic { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+/* selection + floating toolbar */
+.sel { background: var(--ob-sel); border-radius: 2px; }
+.cm-tool { position: absolute; left: 118px; top: 2px; display: flex; gap: 2px; background: #2b2b2b; border: 1px solid #454545; border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,.5); z-index: 2; }
+.cm-tool button { display: flex; align-items: center; gap: 5px; background: none; border: 0; color: var(--ob-fg); font: inherit; font-size: 12px; padding: 4px 8px; border-radius: 5px; cursor: pointer; }
+.cm-tool button:hover, .cm-tool button.hover { background: #3a3a3a; }
+.cm-tool button.hover { background: var(--ob-accent); color: #fff; }
+.cm-tool button .ic { width: 14px; height: 14px; }
+.cm-tool .ic.add { color: var(--ob-add); } .cm-tool .ic.del { color: var(--ob-del); } .cm-tool .ic.hl { color: #e3b341; } .cm-tool .ic.cmt { color: var(--ob-cmt); }
+.cm-tool button.hover .ic { color: #fff; }
+.cm-tool .sep { width: 1px; background: #454545; margin: 2px 2px; }
+.cm-tool::after { content: ""; position: absolute; left: 150px; bottom: -6px; width: 10px; height: 10px; background: #2b2b2b; border-right: 1px solid #454545; border-bottom: 1px solid #454545; transform: rotate(45deg); }
+.ln-text.toolbar-host { padding-top: 52px; }
+
+/* popover cards inside mockup */
+.pop { background: #262626; border: 1px solid #454545; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,.55); padding: 10px 12px; width: 330px; max-width: 100%; font-size: 13px; }
+.pop .hd { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ob-muted); margin-bottom: 6px; }
+.pop .hd b { color: var(--ob-fg); font-weight: 600; }
+.pop .hd .ic { width: 14px; height: 14px; }
+.pop textarea, .pop .input { width: 100%; font: inherit; font-size: 13px; background: #1b1b1b; color: var(--ob-fg); border: 1px solid #454545; border-radius: 6px; padding: 7px 9px; min-height: 60px; resize: none; }
+.pop .input { min-height: 0; }
+.pop .row { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.pop .row .sp { flex: 1; }
+.btn { font: inherit; font-size: 12px; padding: 4px 10px; border-radius: 5px; border: 1px solid #454545; background: #313131; color: var(--ob-fg); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; }
+.btn.primary { background: var(--ob-accent); border-color: var(--ob-accent); color: #fff; }
+.btn.ghost { background: none; border-color: transparent; color: var(--ob-muted); }
+.btn.ok { color: var(--ob-add); } .btn.bad { color: var(--ob-del); }
+.btn .ic { width: 13px; height: 13px; }
+.pop .field-label { font-size: 11px; color: var(--ob-muted); margin: 6px 0 3px; text-transform: uppercase; letter-spacing: .05em; }
+.pop-anchor { position: relative; }
+.pop.float { position: absolute; left: 0; top: 30px; z-index: 3; max-width: none; }
+.ln-text.pop-host { padding-bottom: 180px; }
+.ln-text.pop-host-2 { padding-bottom: 150px; }
+.msg { display: grid; grid-template-columns: 22px 1fr; gap: 8px; padding: 6px 0; }
+.msg + .msg { border-top: 1px solid #333; }
+.avatar { width: 22px; height: 22px; border-radius: 50%; background: #4b4b4b; color: #fff; font-size: 10px; font-weight: 600; display: flex; align-items: center; justify-content: center; }
+.avatar.a { background: #5a4fcf; } .avatar.b { background: #2e8b6b; }
+.msg .who { font-size: 11.5px; color: var(--ob-muted); display: flex; gap: 6px; align-items: baseline; }
+.msg .who b { color: var(--ob-fg); font-weight: 600; }
+.msg .body { margin-top: 1px; }
+.pop.thread { width: 360px; }
+
+/* side panel */
+.ob-side { flex: 0 0 330px; border-left: 1px solid var(--ob-line); background: var(--ob-bg2); display: flex; flex-direction: column; font-size: 13px; }
+.side-hd { padding: 10px 12px 8px; border-bottom: 1px solid var(--ob-line); }
+.side-hd .title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.side-hd .title .count { color: var(--ob-muted); font-weight: 400; font-size: 12px; margin-left: auto; }
+.chips { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+.chips span { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--ob-line); color: var(--ob-muted); }
+.chips span.on { background: var(--ob-accent); border-color: var(--ob-accent); color: #fff; }
+.chips .sp { flex: 1; }
+.side-body { padding: 8px; display: flex; flex-direction: column; gap: 8px; overflow: hidden; }
+.rcard { background: var(--ob-bg); border: 1px solid var(--ob-line); border-radius: 8px; padding: 9px 10px; }
+.rcard.focus { border-color: var(--ob-accent); box-shadow: 0 0 0 1px var(--ob-accent) inset; }
+.rcard .hd { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ob-muted); }
+.rcard .hd .kind { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--ob-fg); }
+.rcard .hd .kind .ic { width: 13px; height: 13px; }
+.rcard .hd .kind.add .ic { color: var(--ob-add); } .rcard .hd .kind.del .ic { color: var(--ob-del); } .rcard .hd .kind.sub .ic { color: #e3b341; } .rcard .hd .kind.cmt .ic { color: var(--ob-cmt); }
+.rcard .hd .when { margin-left: auto; }
+.rcard .quote { margin-top: 6px; padding: 5px 8px; border-left: 2px solid #4a4a4a; color: #c9c9c9; font-size: 12.5px; background: #222; border-radius: 0 4px 4px 0; }
+.rcard .diff { margin-top: 6px; font-size: 13px; }
+.rcard .acts { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+.rcard .acts .sp { flex: 1; }
+.rcard .acts .btn { padding: 3px 8px; font-size: 11.5px; }
+.rcard .msg { padding: 7px 0 4px; }
+.rcard textarea { width: 100%; font: inherit; font-size: 12.5px; background: #1b1b1b; color: var(--ob-fg); border: 1px solid var(--ob-accent); border-radius: 6px; padding: 6px 8px; min-height: 58px; resize: none; margin-top: 4px; }
+.rcard.resolved { opacity: .7; }
+.rcard.resolved .hd .kind { color: var(--ob-muted); }
+.jump { font-size: 11px; color: var(--ob-muted); }
+
+/* settings mockup */
+.ob-settings { display: flex; }
+.set-nav { flex: 0 0 170px; background: var(--ob-bg2); border-right: 1px solid var(--ob-line); padding: 12px 0; font-size: 13px; }
+.set-nav div { padding: 4px 16px; color: var(--ob-muted); }
+.set-nav div.on { color: var(--ob-fg); background: #333; }
+.set-nav .lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; padding: 10px 16px 4px; color: var(--ob-faint); }
+.set-main { flex: 1; min-width: 0; padding: 18px 24px; }
+.set-main h5 { margin: 18px 0 4px; font-size: 15px; font-weight: 600; border-bottom: 1px solid var(--ob-line); padding-bottom: 6px; }
+.set-main h5:first-child { margin-top: 0; }
+.setting { display: flex; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px solid #2c2c2c; font-size: 13px; }
+.setting .info { flex: 1; min-width: 0; }
+.setting .info .d { color: var(--ob-muted); font-size: 12px; }
+.toggle { width: 38px; height: 22px; border-radius: 999px; background: #444; position: relative; flex: none; }
+.toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; background: #ddd; border-radius: 50%; }
+.toggle.on { background: var(--ob-accent); } .toggle.on::after { left: 19px; }
+.select, .text { background: #1b1b1b; border: 1px solid #454545; border-radius: 5px; padding: 4px 10px; font-size: 12.5px; color: var(--ob-fg); white-space: nowrap; }
+.select::after { content: " ▾"; color: var(--ob-muted); }
+.swatches { display: flex; gap: 8px; }
+.sw { width: 26px; height: 22px; border-radius: 5px; border: 1px solid #555; }
+
+/* architecture diagram */
+.arch { display: grid; gap: 10px; margin: 18px 0; }
+.arch .box { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; font-size: .9rem; min-width: 0; }
+.arch .box b { display: block; font-weight: 600; }
+.arch .box span { color: var(--muted); font-size: .85rem; }
+.arch .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.arch .arrow { text-align: center; color: var(--muted); font-size: .8rem; letter-spacing: .06em; text-transform: uppercase; }
+.arch .box.core { border-color: var(--accent); background: var(--accent-soft); }
+
+.phase { display: grid; grid-template-columns: 110px 1fr; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.phase .n { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; }
+.phase ul { margin: 6px 0 0; }
+@media (max-width: 560px) { .phase { grid-template-columns: 1fr; gap: 4px; } }
+
+.q { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); margin: 12px 0; }
+.q b { display: block; }
+.q .rec { color: var(--accent); font-weight: 500; }
+
+footer { margin-top: 64px; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); padding-top: 16px; }
+</style>
+
+<svg style="display:none" aria-hidden="true">
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-swap" viewBox="0 0 24 24"><path d="m16 3 4 4-4 4M20 7H4M8 21l-4-4 4-4M4 17h16"/></symbol>
+  <symbol id="i-msg" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-hl" viewBox="0 0 24 24"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-reply" viewBox="0 0 24 24"><path d="M9 17l-5-5 5-5"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 17v5M5 9l7-7 7 7-3 3v4H8v-4z"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+</svg>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">Design proposal · Obsidian plugin</div>
+  <h1>Critique</h1>
+  <p class="lede">Review marks for Obsidian built on CriticMarkup: one-gesture authoring from a selection, consistent rendering in Live Preview, Source and Reading modes, comment indicators in the right margin, and a review panel where every mark can be acted on.</p>
+  <div class="meta-row">
+    <span><b>Status</b> draft for discussion</span>
+    <span><b>Date</b> 2026-10-28</span>
+    <span><b>Storage</b> the Markdown file only, no sidecar state</span>
+    <span><b>Platforms</b> desktop and mobile</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#goals">Goals</a>
+  <a href="#landscape">Existing plugins</a>
+  <a href="#syntax">Syntax</a>
+  <a href="#authoring">Authoring</a>
+  <a href="#rendering">Rendering</a>
+  <a href="#indicators">Indicators</a>
+  <a href="#panel">Review panel</a>
+  <a href="#actions">Review actions</a>
+  <a href="#settings">Settings</a>
+  <a href="#extras">Proposed extras</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#phases">Phases</a>
+  <a href="#decisions">Decisions</a>
+</nav>
+
+<section id="goals" class="prose">
+  <h2>Goals and principles</h2>
+  <p>The plugin exists to make reviewing a note feel like reviewing in a word processor, without leaving plain Markdown. Four principles drive every decision below.</p>
+  <ul>
+    <li><b>The file is the only state.</b> Every mark, comment, author and timestamp lives in the note as CriticMarkup. Git, Sync, other plugins and AI agents all see the same thing. Nothing is stored in plugin data except preferences.</li>
+    <li><b>Authoring is a gesture, not typing.</b> Select text, pick a mark type, optionally type a comment. The raw syntax is never required, in any mode.</li>
+    <li><b>Every mode renders the same mark the same way.</b> Live Preview and Reading hide the syntax. Source mode shows it, dimmed, with the content styled identically.</li>
+    <li><b>Comments are visible where they belong.</b> A thread shows as an indicator in the right margin at its line, as a popover on click or hover, and as a card in the review panel. The three views stay in sync.</li>
+  </ul>
+  <p>Non-goals for the first release: real-time collaboration, a comments database, any network access.</p>
+</section>
+
+<section id="landscape">
+  <h2>What the existing plugins do</h2>
+  <div class="prose">
+    <p>I read the source and docs of the four plugins you listed. Each gets part of the picture right, and the proposal borrows the best mechanism from each. The table marks what each does today; a few cells are based on reading the code rather than running it.</p>
+  </div>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Capability</th><th>Commentator<br><span class="muted">Fevol</span></th><th>Track Changes<br><span class="muted">philphilphil</span></th><th>Review Comments<br><span class="muted">shotashirai1719</span></th><th>Review Critic<br><span class="muted">rohrbachd</span></th><th>Critique<br><span class="muted">proposed</span></th></tr></thead>
+    <tbody>
+      <tr><td>Selection toolbar on highlight</td><td class="no">no</td><td class="no">no</td><td class="part">comment only</td><td class="no">no (quick-actions pane)</td><td class="yes">all five types</td></tr>
+      <tr><td>Right-click context menu</td><td class="part">add comment, accept/reject</td><td class="yes">submenu, all five</td><td class="no">no</td><td class="no">commands only</td><td class="yes">all five + accept/reject</td></tr>
+      <tr><td>Authoring in Reading mode</td><td class="no">no</td><td class="no">no</td><td class="no">no</td><td class="no">no</td><td class="yes">yes</td></tr>
+      <tr><td>Source mode highlighting</td><td class="yes">yes</td><td class="part">comments tinted, rest raw</td><td class="no">no</td><td class="part">CM6 decorations, unverified in Source</td><td class="yes">syntax dimmed, content styled</td></tr>
+      <tr><td>Reading mode rendering</td><td class="yes">yes</td><td class="yes">accepted or side-by-side</td><td class="yes">comments only</td><td class="yes">yes</td><td class="yes">yes, plus indicators</td></tr>
+      <tr><td>Right-margin comment indicators</td><td class="part">annotation gutter, editor only</td><td class="no">no</td><td class="part">inline bubble icon</td><td class="no">no</td><td class="yes">editor and reading</td></tr>
+      <tr><td>Side panel with per-mark cards</td><td class="part">vault-wide view</td><td class="yes">yes</td><td class="yes">comments only</td><td class="part">comments pane + changes pane</td><td class="yes">one panel, all marks</td></tr>
+      <tr><td>Edit comments inline in the panel</td><td class="no">no</td><td class="part">reply/delete only</td><td class="yes">yes</td><td class="no">resolve only</td><td class="yes">yes</td></tr>
+      <tr><td>Threaded replies</td><td class="yes">yes</td><td class="yes">yes</td><td class="yes">yes, by id</td><td class="no">no</td><td class="yes">yes, by adjacency</td></tr>
+      <tr><td>Author + timestamp metadata</td><td class="part">JSON after sigil, <code>{++{"author":"a"}@@text++}</code></td><td class="yes"><code>{author="a" date="…"++text++}</code></td><td class="part">comments only, <code>{&gt;&gt;id|author|date|TYPE: …&lt;&lt;}</code></td><td class="part">comments only, <code>[author=a]</code></td><td class="yes">attribute prefix on every mark</td></tr>
+      <tr><td>Accept / reject</td><td class="yes">yes</td><td class="yes">yes</td><td class="part">resolve only</td><td class="yes">yes</td><td class="yes">per mark, selection, document</td></tr>
+      <tr><td>Configurable colors</td><td class="part">CSS snippets</td><td class="yes">yes</td><td class="no">no</td><td class="yes">yes, with presets</td><td class="yes">yes</td></tr>
+      <tr><td>Track-changes typing mode</td><td class="yes">yes, marked risky by author</td><td class="no">no</td><td class="no">no</td><td class="yes">yes</td><td class="part">later phase</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="prose">
+    <h3>Takeaways</h3>
+    <ul>
+      <li><b>Track Changes</b> has the cleanest data model: a parser that skips code blocks, anchored edits that are re-validated against the live document before writing, and a metadata prefix that is stripped for free on accept. Critique adopts its syntax so the two plugins, and the agent skill written for it, interoperate.</li>
+      <li><b>Review Comments</b> has the authoring gesture you want: a floating bar that appears on selection. It is comment-only, and its pipe-delimited metadata lives inside the comment body, which cannot extend to additions or deletions without leaking into accepted text.</li>
+      <li><b>Commentator</b> is the most ambitious (suggestion mode, vault index, annotation gutter) and shows how a right-side gutter can be built as a CodeMirror extension. Its metadata is JSON inside the mark, which other tools do not read, and its own README warns about data loss in suggestion mode.</li>
+      <li><b>Review Critic</b> documents its track-changes editing rules well, including the structural-markdown bypasses. It is a good reference if suggestion mode is built later.</li>
+    </ul>
+    <div class="callout warn">
+      <div class="eyebrow">About the missing Track Changes panel</div>
+      Track Changes 2.3.0 declares <code>minAppVersion 1.13.0</code> and uses the new settings-definition API from that release. On an older Obsidian build the plugin can load partially and the view never registers. Checking Settings → About for the app version and the developer console for a load error would confirm it. Either way, Critique will target a lower minimum (1.8) and avoid APIs newer than that.
+    </div>
+  </div>
+</section>
+
+<section id="syntax">
+  <h2>Syntax</h2>
+  <div class="prose">
+    <p>Critique reads and writes standard CriticMarkup. The five marks are unchanged. Metadata is an optional attribute prefix placed between the opening brace and the sigil, identical to the Track Changes format, so a note annotated by either plugin or by an agent renders in both.</p>
+  </div>
+  <div class="syntax-sample">
+    <div class="sx"><span class="name">Addition</span><code>{++after the retry fix,++}</code></div>
+    <div class="sx"><span class="name">Deletion</span><code>{--mostly--}</code></div>
+    <div class="sx"><span class="name">Substitution</span><code>{~~March 3~&gt;March 10~~}</code></div>
+    <div class="sx"><span class="name">Highlight</span><code>{==Owner: platform team==}</code></div>
+    <div class="sx"><span class="name">Comment</span><code>{&gt;&gt;Do we have a dashboard link for this?&lt;&lt;}</code></div>
+    <div class="sx"><span class="name">With metadata</span><code>{author="Chris" date="2026-10-28T14:05-07:00"~~March 3~&gt;March 10~~}</code></div>
+    <div class="sx"><span class="name">Anchored comment</span><code>{==Latency improved by roughly 40%.==}{author="Chris" date="…"&gt;&gt;Do we have a dashboard link?&lt;&lt;}</code></div>
+    <div class="sx"><span class="name">Thread</span><code>{==span==}{author="Chris" date="…"&gt;&gt;root&lt;&lt;}{author="Dana" date="…"&gt;&gt;reply&lt;&lt;}</code></div>
+    <div class="sx"><span class="name">Comment on a change</span><code>{author="Chris"--rewrite the queue--}{author="Chris"&gt;&gt;Keep this as a substitution instead?&lt;&lt;}</code></div>
+    <div class="sx"><span class="name">Resolved thread</span><code>{author="Chris" date="…" status="resolved"&gt;&gt;Title case here?&lt;&lt;}</code></div>
+  </div>
+  <div class="prose">
+    <h3>Rules</h3>
+    <ul>
+      <li><b>Attributes</b> are <code>key="value"</code> pairs, space separated, no whitespace after the brace. A value may not contain <code>"</code>, braces or a newline. A prefix that fails to parse makes the mark fail locally instead of swallowing text, which is the corruption defence Track Changes relies on.</li>
+      <li><b>Recognised keys</b>: <code>author</code>, <code>date</code> (ISO 8601, precision configurable, display-only), <code>status</code> (<code>resolved</code>), and optionally <code>label</code> (see extras). Unknown keys are preserved untouched.</li>
+      <li><b>Threads</b> are adjacent comment marks with no gap between them. The first is the root. Nothing else is needed to link replies, so there are no ids to generate or keep unique.</li>
+      <li><b>Anchors</b>: a highlight, addition, deletion or substitution directly before a thread is its anchor. The panel shows one card for the pair. Accepting or rejecting a change deletes its attached rationale thread; deleting a thread never deletes its anchored change.</li>
+      <li><b>Comments stay on one line.</b> A hard line break typed into a comment is stored as the two characters <code>\n</code> and rendered back as a break, so a comment never splits a paragraph.</li>
+      <li><b>Code is left alone.</b> Marks inside fenced, indented or inline code are not parsed, in any mode.</li>
+      <li><b>Accept</b> keeps additions and new text, drops deletions, old text, comments and highlights, and strips every prefix. <b>Reject</b> is the mirror. Both produce plain Markdown with no trace of the mark.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="authoring">
+  <h2>Authoring from a selection</h2>
+  <div class="prose">
+    <p>Selecting text in any mode shows a small toolbar above the selection. One click wraps the selection. Comment, Substitution and Highlight open a second step where the comment or replacement is typed; Addition and Deletion apply immediately. Every mark written by the plugin is stamped with the configured signature and timestamp.</p>
+  </div>
+
+  <figure>
+    <div class="ob scroll">
+      <div class="ob-title"><div class="dots"><i></i><i></i><i></i></div><span class="t">Scheduler rollout notes · Notes</span></div>
+      <div class="ob-tabs"><span class="ob-tab">Scheduler rollout notes</span><span class="mode"><svg class="ic"><use href="#i-pen"/></svg> Live Preview</span></div>
+      <div class="ob-body">
+        <div class="ob-editor">
+          <div class="ln h2"><div class="ln-text">Rollout summary</div><div class="ln-tray"></div></div>
+          <div class="ln"><div class="ln-text toolbar-host">
+            <div class="cm-tool" role="toolbar" aria-label="Mark selection">
+              <button><svg class="ic add"><use href="#i-plus"/></svg>Add</button>
+              <button><svg class="ic del"><use href="#i-minus"/></svg>Delete</button>
+              <button><svg class="ic"><use href="#i-swap"/></svg>Replace</button>
+              <span class="sep"></span>
+              <button class="hover"><svg class="ic cmt"><use href="#i-msg"/></svg>Comment</button>
+              <button><svg class="ic hl"><use href="#i-hl"/></svg>Highlight</button>
+            </div>
+            The new scheduler shipped to all tenants on March 10. Rollout was <span class="sel">uneven in the first week</span>, but after the retry fix, error rates settled below the target.
+          </div><div class="ln-tray"></div></div>
+          <div class="ln"><div class="ln-text">Latency improved by roughly 40%. The on-call rotation was unchanged.</div><div class="ln-tray"></div></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>The selection toolbar in Live Preview. It appears after the selection settles (about 80 ms, suppressed during IME composition), hides on scroll or Escape, and sits inside the editor so it follows pop-out windows. On mobile it is a bottom sheet instead of a floating bar.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="ob scroll">
+      <div class="ob-title"><div class="dots"><i></i><i></i><i></i></div><span class="t">Scheduler rollout notes · Notes</span></div>
+      <div class="ob-tabs"><span class="ob-tab">Scheduler rollout notes</span><span class="mode"><svg class="ic"><use href="#i-pen"/></svg> Live Preview</span></div>
+      <div class="ob-body">
+        <div class="ob-editor">
+          <div class="ln h2"><div class="ln-text">Rollout summary</div><div class="ln-tray"></div></div>
+          <div class="ln"><div class="ln-text pop-host">
+            The new scheduler shipped to all tenants on March 10. Rollout was <span class="pop-anchor"><span class="m-cmt">uneven in the first week</span>
+              <div class="pop float">
+                <div class="hd"><svg class="ic" style="color:var(--ob-cmt)"><use href="#i-msg"/></svg><b>Comment</b><span>on “uneven in the first week”</span></div>
+                <textarea id="mock-comment-1" aria-label="Comment">Can we quantify “uneven”? A p95 number would land better with the exec summary readers.</textarea>
+                <div class="row"><span class="avatar a">CM</span><span class="muted" style="color:var(--ob-muted);font-size:12px">Chris · 2026-10-28 14:05</span><span class="sp"></span><button class="btn ghost">Cancel</button><button class="btn primary">Comment <kbd style="background:none;border:0;color:#ddd;padding:0;font-size:10px">⌘↩</kbd></button></div>
+              </div>
+            </span>, but after the retry fix, error rates settled below the target.
+          </div><div class="ln-tray"></div></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Step two for a comment. The selection is already wrapped as the anchor highlight, so the author sees exactly what the comment will attach to. Cancel removes the anchor again. The same popover, with a “Replace with” field prefilled with the selected text, serves Substitution; Highlight offers an optional note.</figcaption>
+  </figure>
+
+  <div class="prose">
+    <h3>Other ways in</h3>
+    <ul>
+      <li><b>Right-click menu.</b> A <i>Critique</i> section in the editor context menu with the five mark types, and, when the cursor is inside a mark, Accept, Reject, Comment on this change, Edit metadata. Reading mode gets the same menu via its own context-menu handler.</li>
+      <li><b>Command palette.</b> One command per mark type plus Accept at cursor, Reject at cursor, Next mark, Previous mark, Toggle panel, Toggle preview mode, Finalize. All bindable to hotkeys. Suggested defaults: <kbd>⌘⇧+</kbd> add, <kbd>⌘⇧-</kbd> delete, <kbd>⌘⇧M</kbd> comment.</li>
+      <li><b>No selection.</b> Comment inserts a standalone comment at the cursor. Addition inserts an empty <code>{++|++}</code> with the cursor inside. The other three do nothing and say so in a notice.</li>
+      <li><b>Selection inside an existing mark.</b> The toolbar switches to the mark’s actions (Accept, Reject, Comment, Remove) rather than offering to nest a mark. Nested marks are never written.</li>
+    </ul>
+    <h3>Reading mode</h3>
+    <p>Reading mode has no editor, so the selection is a DOM range. Critique maps it back to source offsets: the block containing the selection reports its source line range through Obsidian’s section info, the rendered text of the block is aligned to the block’s source text with a character diff, and the selection’s start and end are carried across the equal runs of that alignment. The mark is then written to the file with the same anchored-edit path as the editor, and Reading mode re-renders. When the alignment is ambiguous (the selected text appears twice in a block and the alignment cannot separate them) the plugin falls back to opening the note in Live Preview with the selection restored, and says why. This is the one feature none of the existing plugins attempt, and it is the main technical risk in the plan.</p>
+  </div>
+</section>
+
+<section id="rendering">
+  <h2>Rendering in each mode</h2>
+  <div class="prose">
+    <p>Marks are styled the same in all three modes. Live Preview and Reading hide the syntax. Source mode keeps the full syntax visible but dims the delimiters and metadata so the content stays readable.</p>
+  </div>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Mark</th><th>Live Preview and Reading</th><th>Source</th></tr></thead>
+    <tbody>
+      <tr><td>Addition</td><td>Green text on a faint green tint, underlined</td><td>Same colors on the content; <code>{++</code> <code>++}</code> dimmed green</td></tr>
+      <tr><td>Deletion</td><td>Red text, strikethrough, faint red tint</td><td>Same; <code>{--</code> <code>--}</code> dimmed red</td></tr>
+      <tr><td>Substitution</td><td>Old text as a deletion, a small arrow, new text as an addition</td><td>Same; <code>~&gt;</code> shown as the separator</td></tr>
+      <tr><td>Highlight</td><td>Yellow background</td><td>Same; <code>{==</code> <code>==}</code> dimmed</td></tr>
+      <tr><td>Comment, anchored</td><td>Anchor gets a blue tint and dotted underline; comment text hidden; margin indicator</td><td>Comment text shown in blue after the anchor</td></tr>
+      <tr><td>Comment, standalone</td><td>Small blue chip with a bubble icon at the position; margin indicator</td><td>Comment text shown in blue</td></tr>
+      <tr><td>Any mark, by Mark style</td><td>Highlighted: tint as above. Dashed underline: no tint, dashed underline in the mark color. Off: plain text, margin indicator only</td><td>Same, delimiters always dimmed</td></tr>
+      <tr><td>Metadata prefix</td><td>Hidden; surfaced in popover and panel</td><td>Shown dimmed and smaller; optional fold into an <code>@Chris · 2h</code> chip (setting, off by default)</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="prose">
+    <p>Text decoration is a setting per type. Deletion defaults to strikethrough plus color; addition to color plus underline so the two remain distinguishable for color-blind readers. A “color only” and a “bold” option exist for each. Every color is a CSS variable, so theme snippets can override them too.</p>
+    <p>On top of the per-type decoration, a global <b>Mark style</b> setting controls how marked spans are called out in the text:</p>
+    <ul>
+      <li><b>Highlighted</b> (default): the span gets a faint background tint in the mark’s color, plus the per-type decoration.</li>
+      <li><b>Dashed underline</b>: no tint; a dashed underline in the mark’s color, plus the per-type decoration. Quieter for long reads and for themes where tints clash.</li>
+      <li><b>Off (tray only)</b>: no inline styling at all. The margin tray alone shows where marks are, and hovering an indicator briefly outlines its span. In this style the margin indicators are forced on and cover every mark type, not only comments.</li>
+    </ul>
+    <p>The setting applies to Live Preview, Source and Reading mode alike. In Source mode the delimiters stay dimmed in every style so the syntax remains readable.</p>
+  </div>
+
+  <figure>
+    <div class="ob scroll">
+      <div class="ob-title"><div class="dots"><i></i><i></i><i></i></div><span class="t">Scheduler rollout notes · Notes</span></div>
+      <div class="ob-tabs"><span class="ob-tab">Scheduler rollout notes</span><span class="mode"><svg class="ic"><use href="#i-pen"/></svg> Live Preview</span></div>
+      <div class="ob-body">
+        <div class="ob-editor">
+          <div class="ln h2"><div class="ln-text">Rollout summary</div><div class="ln-tray"></div></div>
+          <div class="ln"><div class="ln-text">The new scheduler shipped to all tenants on <span class="m-sub"><span class="m-del">March 3</span><span class="arrow">▸</span><span class="m-add">March 10</span></span>. Rollout was <span class="m-del">mostly</span> uneven in the first week, but <span class="m-add">after the retry fix,</span> error rates settled below the target.</div><div class="ln-tray"></div></div>
+          <div class="ln"><div class="ln-text"><span class="m-cmt">Latency improved by roughly 40%.</span> The on-call rotation was unchanged.</div><div class="ln-tray"><span class="ind"><svg class="ic"><use href="#i-msg"/></svg>2</span></div></div>
+          <div class="ln"><div class="ln-text">Next quarter we plan to <span class="m-sub"><span class="m-del">rewrite the queue</span><span class="arrow">▸</span><span class="m-add">replace the queue with a ring buffer</span></span> and retire the legacy cron bridge.</div><div class="ln-tray"><span class="ind"><svg class="ic"><use href="#i-msg"/></svg>1</span></div></div>
+          <div class="ln"><div class="ln-text"><span class="m-hl">Owner: platform team.</span> Follow-up review on November 4. <span class="chip"><svg class="ic" style="width:11px;height:11px"><use href="#i-msg"/></svg></span></div><div class="ln-tray"><span class="ind"><svg class="ic"><use href="#i-msg"/></svg>1</span></div></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Live Preview. Syntax and metadata are hidden. The second paragraph carries an anchored two-message thread; the third has a rationale comment attached to a substitution; the last line has a plain highlight with no comment (no indicator) and a standalone comment chip. Clicking inside a mark exposes its raw syntax for direct editing, as Obsidian does for links.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="ob scroll">
+      <div class="ob-title"><div class="dots"><i></i><i></i><i></i></div><span class="t">Scheduler rollout notes · Notes</span></div>
+      <div class="ob-tabs"><span class="ob-tab">Scheduler rollout notes</span><span class="mode">&lt;/&gt; Source</span></div>
+      <div class="ob-body">
+        <div class="ob-editor src">
+          <div class="ln h2"><div class="ln-text"><span class="sy">## </span>Rollout summary</div><div class="ln-tray"></div></div>
+          <div class="ln"><div class="ln-text">The new scheduler shipped to all tenants on <span class="sy d">{</span><span class="mt">author="Chris" date="2026-10-28T14:05-07:00"</span><span class="sy d">~~</span><span class="m-del">March 3</span><span class="sy a">~&gt;</span><span class="m-add">March 10</span><span class="sy a">~~}</span>. Rollout was <span class="sy d">{</span><span class="mt">author="Chris" date="2026-10-28T14:06-07:00"</span><span class="sy d">--</span><span class="m-del">mostly</span><span class="sy d">--}</span> uneven in the first week, but <span class="sy a">{</span><span class="mt">author="Chris" date="2026-10-28T14:06-07:00"</span><span class="sy a">++</span><span class="m-add">after the retry fix,</span><span class="sy a">++}</span> error rates settled below the target.</div><div class="ln-tray"></div></div>
+          <div class="ln"><div class="ln-text"><span class="sy h">{==</span><span class="m-hl">Latency improved by roughly 40%.</span><span class="sy h">==}</span><span class="sy c">{</span><span class="mt">author="Chris" date="2026-10-28T14:08-07:00"</span><span class="sy c">&gt;&gt;</span><span class="m-cmt">Do we have a dashboard link for this? Reviewers will ask.</span><span class="sy c">&lt;&lt;}</span><span class="sy c">{</span><span class="mt">author="Dana" date="2026-10-28T15:21-07:00"</span><span class="sy c">&gt;&gt;</span><span class="m-cmt">Grafana → Scheduler → p95. I'll add it.</span><span class="sy c">&lt;&lt;}</span> The on-call rotation was unchanged.</div><div class="ln-tray"><span class="ind"><svg class="ic"><use href="#i-msg"/></svg>2</span></div></div>
+          <div class="ln"><div class="ln-text">Next quarter we plan to <span class="sy d">{</span><span class="mt">author="Chris" date="2026-10-28T14:11-07:00"</span><span class="sy d">~~</span><span class="m-del">rewrite the queue</span><span class="sy a">~&gt;</span><span class="m-add">replace the queue with a ring buffer</span><span class="sy a">~~}</span><span class="sy c">{</span><span class="mt">author="Chris" date="2026-10-28T14:11-07:00"</span><span class="sy c">&gt;&gt;</span><span class="m-cmt">Keep this as a substitution instead?</span><span class="sy c">&lt;&lt;}</span> and retire the legacy cron bridge.</div><div class="ln-tray"><span class="ind"><svg class="ic"><use href="#i-msg"/></svg>1</span></div></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Source mode. Every character of the file is visible and editable. Delimiters take the mark’s color at low opacity, metadata is dimmed and smaller, and the content carries the same styling as Live Preview. Margin indicators still appear, since the line is still the line.</figcaption>
+  </figure>
+
+  <figure>
+    <div class="ob scroll">
+      <div class="ob-title"><div class="dots"><i></i><i></i><i></i></div><span class="t">Scheduler rollout notes · Notes</span></div>
+      <div class="ob-tabs"><span class="ob-tab">Scheduler rollout notes</span><span class="mode"><svg class="ic"><use href="#i-eye"/></svg> Reading</span></div>
+      <div class="ob-body">
+        <div class="ob-editor">
+          <div class="ln h2"><div class="ln-text">Rollout summary</div><div class="ln-tray"></div></div>
+          <div class="ln"><div class="ln-text">The new scheduler shipped to all tenants on <span class="m-sub"><span class="m-del">March 3</span><span class="arrow">▸</span><span class="m-add">March 10</span></span>. Rollout was <span class="m-del">mostly</span> uneven in the first week, but <span class="m-add">after the retry fix,</span> error rates settled below the target.</div><div class="ln-tray"></div></div>
+          <div class="ln"><div class="ln-text pop-host"><span class="pop-anchor"><span class="m-cmt focus">Latency improved by roughly 40%.</span>
+            <div class="pop thread float" style="top:28px">
+              <div class="hd"><svg class="ic" style="color:var(--ob-cmt)"><use href="#i-msg"/></svg><b>Thread</b><span>2 messages</span><span style="margin-left:auto"><svg class="ic" style="width:14px;height:14px"><use href="#i-more"/></svg></span></div>
+              <div class="msg"><span class="avatar a">CM</span><div><div class="who"><b>Chris</b><span>today 14:08</span></div><div class="body">Do we have a dashboard link for this? Reviewers will ask.</div></div></div>
+              <div class="msg"><span class="avatar b">DK</span><div><div class="who"><b>Dana</b><span>today 15:21</span></div><div class="body">Grafana → Scheduler → p95. I'll add it.</div></div></div>
+              <div class="row"><input class="input" id="mock-reply-1" aria-label="Reply" placeholder="Reply…"><button class="btn ok"><svg class="ic"><use href="#i-check"/></svg>Resolve</button></div>
+            </div></span> The on-call rotation was unchanged.</div><div class="ln-tray"><span class="ind active"><svg class="ic"><use href="#i-msg"/></svg>2</span></div></div>
+          <div class="ln"><div class="ln-text">Next quarter we plan to <span class="m-sub"><span class="m-del">rewrite the queue</span><span class="arrow">▸</span><span class="m-add">replace the queue with a ring buffer</span></span> and retire the legacy cron bridge.</div><div class="ln-tray"><span class="ind"><svg class="ic"><use href="#i-msg"/></svg>1</span></div></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Reading mode. No syntax, same styling, same margin indicators. Clicking an indicator (or the anchored span) opens the thread popover with a reply field and Resolve. A setting switches Reading mode to an “accepted” preview that hides all marks and indicators for a clean read.</figcaption>
+  </figure>
+</section>
+
+<section id="indicators">
+  <h2>Margin indicators and popovers</h2>
+  <div class="prose">
+    <p>An indicator appears in the right margin for every line that holds at least one thread. It shows the message count, takes the comment color, and turns solid when its thread is focused in the popover or panel. Lines with marks but no comments get no indicator, so the margin only ever says “there is something to read here”.</p>
+    <ul>
+      <li><b>In the editor</b> (Live Preview and Source) the indicator layer is a CodeMirror view plugin that positions one element per thread at the line’s vertical coordinate, re-measured on every viewport change, so it survives folding, wrapped lines and embeds. This is simpler and less fragile than a custom gutter and works identically in both editor modes.</li>
+      <li><b>In Reading mode</b> the post-processor adds the same layer to each rendered section. Positions are measured from the anchor element’s bounding box, so an indicator sits beside the exact wrapped line of its anchor.</li>
+      <li><b>Several threads on one line</b> stack into one indicator with a total count; clicking it lists the threads.</li>
+      <li><b>Click</b> opens the thread popover shown above. <b>Hover</b> over any mark (not just comments) shows a lighter card with the type, author, time and quick Accept / Reject, so a reviewer can process simple changes without opening the panel.</li>
+      <li><b>Panel sync.</b> Clicking an indicator also scrolls the panel to the matching card; clicking a card scrolls the editor to the mark and pulses its indicator.</li>
+    </ul>
+  </div>
+
+  <figure>
+    <div class="ob scroll">
+      <div class="ob-title"><div class="dots"><i></i><i></i><i></i></div><span class="t">Scheduler rollout notes · Notes</span></div>
+      <div class="ob-tabs"><span class="ob-tab">Scheduler rollout notes</span><span class="mode"><svg class="ic"><use href="#i-pen"/></svg> Live Preview</span></div>
+      <div class="ob-body">
+        <div class="ob-editor">
+          <div class="ln"><div class="ln-text pop-host-2">The new scheduler shipped to all tenants on <span class="pop-anchor"><span class="m-sub"><span class="m-del">March 3</span><span class="arrow">▸</span><span class="m-add">March 10</span></span>
+            <div class="pop float" style="width:300px">
+              <div class="hd"><svg class="ic" style="color:#e3b341"><use href="#i-swap"/></svg><b>Replace</b><span>Chris · 2 h ago</span></div>
+              <div style="font-size:13.5px"><span class="m-del">March 3</span> <span class="arrow" style="color:var(--ob-muted)">▸</span> <span class="m-add">March 10</span></div>
+              <div class="row"><button class="btn ok"><svg class="ic"><use href="#i-check"/></svg>Accept</button><button class="btn bad"><svg class="ic"><use href="#i-x"/></svg>Reject</button><span class="sp"></span><button class="btn ghost"><svg class="ic"><use href="#i-msg"/></svg>Comment</button></div>
+            </div></span>. Rollout was <span class="m-del">mostly</span> uneven in the first week.</div><div class="ln-tray"></div></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>Hover card on a substitution. Author and time come from the metadata prefix; a mark without a prefix shows the configured signature as a fallback, labelled as such.</figcaption>
+  </figure>
+</section>
+
+<section id="panel">
+  <h2>Review panel</h2>
+  <div class="prose">
+    <p>The panel is a standard Obsidian view in the right sidebar (or a split, by setting), toggled with a ribbon icon, a command, or by clicking any indicator. It lists every mark in the active note in document order as a card. Cards are live: edits in the note update them, and actions on a card write to the note through the same anchored-edit path as everything else.</p>
+  </div>
+
+  <figure>
+    <div class="ob scroll">
+      <div class="ob-title"><div class="dots"><i></i><i></i><i></i></div><span class="t">Scheduler rollout notes · Notes</span></div>
+      <div class="ob-tabs"><span class="ob-tab">Scheduler rollout notes</span><span class="mode"><svg class="ic"><use href="#i-pen"/></svg> Live Preview</span></div>
+      <div class="ob-body" style="min-width:860px">
+        <div class="ob-editor">
+          <div class="ln h2"><div class="ln-text">Rollout summary</div><div class="ln-tray"></div></div>
+          <div class="ln"><div class="ln-text">The new scheduler shipped to all tenants on <span class="m-sub"><span class="m-del">March 3</span><span class="arrow">▸</span><span class="m-add">March 10</span></span>. Rollout was <span class="m-del">mostly</span> uneven in the first week, but <span class="m-add">after the retry fix,</span> error rates settled below the target.</div><div class="ln-tray"></div></div>
+          <div class="ln"><div class="ln-text"><span class="m-cmt focus">Latency improved by roughly 40%.</span> The on-call rotation was unchanged.</div><div class="ln-tray"><span class="ind active"><svg class="ic"><use href="#i-msg"/></svg>2</span></div></div>
+          <div class="ln"><div class="ln-text">Next quarter we plan to <span class="m-sub"><span class="m-del">rewrite the queue</span><span class="arrow">▸</span><span class="m-add">replace the queue with a ring buffer</span></span> and retire the legacy cron bridge.</div><div class="ln-tray"><span class="ind"><svg class="ic"><use href="#i-msg"/></svg>1</span></div></div>
+          <div class="ln"><div class="ln-text"><span class="m-hl">Owner: platform team.</span> Follow-up review on November 4.</div><div class="ln-tray"></div></div>
+        </div>
+        <aside class="ob-side">
+          <div class="side-hd">
+            <div class="title"><svg class="ic" style="color:var(--ob-accent)"><use href="#i-msg"/></svg>Critique<span class="count">4 changes · 2 threads</span></div>
+            <div class="chips"><span class="on">All</span><span>Changes</span><span>Comments</span><span>Mine</span><span class="sp"></span><span>Resolved ▾</span></div>
+          </div>
+          <div class="side-body">
+            <div class="rcard">
+              <div class="hd"><span class="kind sub"><svg class="ic"><use href="#i-swap"/></svg>Replace</span><span>Chris</span><span class="when">2 h ago</span></div>
+              <div class="diff"><span class="m-del">March 3</span> <span style="color:var(--ob-muted)">▸</span> <span class="m-add">March 10</span></div>
+              <div class="acts"><button class="btn ok"><svg class="ic"><use href="#i-check"/></svg>Accept</button><button class="btn bad"><svg class="ic"><use href="#i-x"/></svg>Reject</button><span class="sp"></span><button class="btn ghost"><svg class="ic"><use href="#i-msg"/></svg></button></div>
+            </div>
+            <div class="rcard">
+              <div class="hd"><span class="kind del"><svg class="ic"><use href="#i-minus"/></svg>Delete</span><span>Chris</span><span class="when">2 h ago</span></div>
+              <div class="diff"><span class="m-del">mostly</span></div>
+              <div class="acts"><button class="btn ok"><svg class="ic"><use href="#i-check"/></svg>Accept</button><button class="btn bad"><svg class="ic"><use href="#i-x"/></svg>Reject</button><span class="sp"></span><button class="btn ghost"><svg class="ic"><use href="#i-msg"/></svg></button></div>
+            </div>
+            <div class="rcard focus">
+              <div class="hd"><span class="kind cmt"><svg class="ic"><use href="#i-msg"/></svg>Thread</span><span>2 messages</span><span class="when">line 4</span></div>
+              <div class="quote">Latency improved by roughly 40%.</div>
+              <div class="msg"><span class="avatar a">CM</span><div><div class="who"><b>Chris</b><span>today 14:08</span></div><div class="body">Do we have a dashboard link for this? Reviewers will ask.</div></div></div>
+              <div class="msg"><span class="avatar b">DK</span><div><div class="who"><b>Dana</b><span>today 15:21</span><span style="margin-left:auto;color:var(--ob-accent)">editing</span></div>
+                <textarea id="mock-edit-1" aria-label="Edit comment">Grafana → Scheduler → p95. I'll add the link inline.</textarea>
+                <div class="acts" style="margin-top:6px"><button class="btn primary">Save</button><button class="btn ghost">Cancel</button><span class="sp"></span><span class="jump">⌘↩ to save</span></div>
+              </div></div>
+              <div class="acts"><button class="btn"><svg class="ic"><use href="#i-reply"/></svg>Reply</button><button class="btn ok"><svg class="ic"><use href="#i-check"/></svg>Resolve</button><span class="sp"></span><button class="btn ghost"><svg class="ic"><use href="#i-more"/></svg></button></div>
+            </div>
+            <div class="rcard">
+              <div class="hd"><span class="kind sub"><svg class="ic"><use href="#i-swap"/></svg>Replace</span><span>Chris</span><span class="when">2 h ago</span></div>
+              <div class="diff"><span class="m-del">rewrite the queue</span> <span style="color:var(--ob-muted)">▸</span> <span class="m-add">replace the queue with a ring buffer</span></div>
+              <div class="msg" style="padding-top:8px"><span class="avatar a">CM</span><div><div class="who"><b>Chris</b><span>today 14:11</span></div><div class="body">Keep this as a substitution instead?</div></div></div>
+              <div class="acts"><button class="btn ok"><svg class="ic"><use href="#i-check"/></svg>Accept</button><button class="btn bad"><svg class="ic"><use href="#i-x"/></svg>Reject</button><span class="sp"></span><button class="btn ghost"><svg class="ic"><use href="#i-reply"/></svg></button></div>
+            </div>
+            <div class="rcard resolved">
+              <div class="hd"><span class="kind"><svg class="ic" style="color:var(--ob-add)"><use href="#i-check"/></svg>Resolved</span><span>Chris</span><span class="when">yesterday</span></div>
+              <div class="quote" style="color:#999">Title case for the heading?</div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <figcaption>The review panel beside the note. The focused thread card shows a reply being edited in place; the card for the second substitution shows a rationale comment folded into the change’s own card. Resolved threads collapse to one line and are hidden by the filter unless asked for.</figcaption>
+  </figure>
+
+  <div class="prose">
+    <h3>Card behaviour</h3>
+    <ul>
+      <li><b>Every card</b> shows the type, author, relative time (absolute on hover) and a jump target. Clicking the card body scrolls the note to the mark and flashes it. The card that holds the cursor’s mark is outlined.</li>
+      <li><b>Change cards</b> (add, delete, replace) show the diff, with changed characters emphasised inside a substitution, plus Accept, Reject and Comment. A rationale thread attached to the change is rendered inside the card and goes away with the change.</li>
+      <li><b>Thread cards</b> quote the anchored span and list messages. Each message can be edited in place (double-click or the pencil in its menu), with <kbd>⌘↩</kbd> to save and <kbd>Esc</kbd> to cancel. Author and date on an edited message are kept; an <code>edited="…"</code> timestamp is optional (setting). Reply appends a message with the current signature. Resolve sets <code>status="resolved"</code> on the root; Reopen clears it. Delete removes one message or the whole thread, with confirmation by default. Deleting a thread removes its highlight anchor; it never removes a change anchor.</li>
+      <li><b>Highlight cards</b> offer Comment (starts a thread on the highlight) and Remove highlight.</li>
+      <li><b>Header</b> shows counts, filters (All, Changes, Comments, Mine, author names when more than one), a resolved toggle, sort (document order or newest first), and a menu with Accept all, Reject all, Finalize and Collapse all.</li>
+      <li><b>Safety.</b> If the note changed between drawing a card and clicking it, the action re-finds the mark by its anchoring text before writing; if it cannot be found exactly once, the action is refused with a notice instead of editing the wrong range.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="actions" class="prose">
+  <h2>Review actions</h2>
+  <ul>
+    <li><b>Accept / Reject</b> at cursor, for a selection, for the whole note, or per card. Multi-cursor selections are handled as one transaction. Everything goes through the editor’s undo stack when the note is open.</li>
+    <li><b>Navigation.</b> Next mark / Previous mark commands cycle through marks in the note; the panel and indicators follow.</li>
+    <li><b>Preview modes.</b> A view-header toggle switches the note between <i>Markup</i> (default), <i>Accepted</i> (how the note reads if every change is accepted; comments and highlights hidden) and <i>Original</i> (every change rejected). Both previews are display-only and never touch the file. The active mode is per note view and shown in the status bar.</li>
+    <li><b>Finalize.</b> A dialog that accepts or rejects all changes, removes comments and highlights, and strips metadata, with each step as a checkbox. Produces a clean note ready to publish. Defaults are configurable.</li>
+    <li><b>Export strict CriticMarkup.</b> Copies or writes a version of the note with metadata prefixes removed, for tools that implement only the base syntax (Marked, MultiMarkdown, pandoc filters).</li>
+    <li><b>Status bar.</b> “4 changes · 2 threads” for the active note; click toggles the panel.</li>
+  </ul>
+</section>
+
+<section id="settings">
+  <h2>Settings</h2>
+  <div class="prose">
+    <p>Everything visual and everything written into the file is configurable. The signature and timestamp options determine the metadata prefix; the appearance options map to CSS variables so theme snippets can override them too.</p>
+  </div>
+  <figure>
+    <div class="ob scroll">
+      <div class="ob-title"><div class="dots"><i></i><i></i><i></i></div><span class="t">Settings</span></div>
+      <div class="ob-settings" style="min-width:720px">
+        <div class="set-nav">
+          <div class="lbl">Options</div><div>General</div><div>Editor</div><div>Appearance</div><div>Hotkeys</div>
+          <div class="lbl">Community plugins</div><div class="on">Critique</div><div>Dataview</div><div>Templater</div>
+        </div>
+        <div class="set-main">
+          <h5>Signature</h5>
+          <div class="setting"><div class="info">Author name<div class="d">Written as <code style="background:#333;color:#ddd">author="…"</code> on every mark you create. Also the fallback name for marks without one.</div></div><span class="text">Chris</span></div>
+          <div class="setting"><div class="info">Add timestamps<div class="d">Written as <code style="background:#333;color:#ddd">date="…"</code> on every mark you create.</div></div><span class="toggle on"></span></div>
+          <div class="setting"><div class="info">Timestamp precision<div class="d">ISO 8601 with the local UTC offset.</div></div><span class="select">Minutes</span></div>
+          <div class="setting"><div class="info">Record edit time<div class="d">Add <code style="background:#333;color:#ddd">edited="…"</code> when a comment is changed later.</div></div><span class="toggle"></span></div>
+          <h5>Appearance</h5>
+          <div class="setting"><div class="info">Colors<div class="d">Addition, deletion, highlight, comment. Substitution uses addition and deletion.</div></div><div class="swatches"><span class="sw" style="background:#3fb950"></span><span class="sw" style="background:#f85149"></span><span class="sw" style="background:#e3b341"></span><span class="sw" style="background:#58a6ff"></span></div></div>
+          <div class="setting"><div class="info">Mark style<div class="d">Highlighted, dashed underline, or off (margin tray only).</div></div><span class="select">Highlighted</span></div>
+          <div class="setting"><div class="info">Tint strength</div><span class="select">100%</span></div>
+          <div class="setting"><div class="info">Deletion style</div><span class="select">Strikethrough + color</span></div>
+          <div class="setting"><div class="info">Addition style</div><span class="select">Underline + color</span></div>
+          <div class="setting"><div class="info">Color comments by author<div class="d">Each author gets a stable hue for their comment anchors and avatars.</div></div><span class="toggle on"></span></div>
+          <div class="setting"><div class="info">Fold metadata in Source mode<div class="d">Show the prefix as a small chip until the cursor enters it.</div></div><span class="toggle"></span></div>
+          <h5>Indicators and panel</h5>
+          <div class="setting"><div class="info">Margin indicators in editor</div><span class="toggle on"></span></div>
+          <div class="setting"><div class="info">Margin indicators in Reading mode</div><span class="toggle on"></span></div>
+          <div class="setting"><div class="info">Show marks in Reading mode<div class="d">Off renders the accepted text with no marks or indicators.</div></div><span class="toggle on"></span></div>
+          <div class="setting"><div class="info">Panel location</div><span class="select">Right sidebar</span></div>
+          <div class="setting"><div class="info">Confirm before deleting comments</div><span class="toggle on"></span></div>
+          <div class="setting"><div class="info">Strip marks when copying<div class="d">Copy the accepted text to the clipboard instead of raw syntax.</div></div><span class="toggle"></span></div>
+        </div>
+      </div>
+    </div>
+    <figcaption>The settings tab. Finalize defaults and the selection-toolbar toggle live further down. Per-author color overrides are editable once more than one author appears in the vault.</figcaption>
+  </figure>
+</section>
+
+<section id="extras">
+  <h2>Proposed extras</h2>
+  <div class="prose"><p>Beyond the list you gave, these fill gaps I hit in the existing plugins or that fall out naturally from the design. Each is small except the last two.</p></div>
+  <div class="grid2">
+    <div class="card"><h4>Resolve and reopen threads <span class="pill p2">phase 2</span></h4><p>A <code>status="resolved"</code> attribute on the root comment. Resolved threads dim in the note, collapse in the panel and drop out of the indicator count. Nothing is deleted, so the discussion stays in the file for anyone who wants it.</p></div>
+    <div class="card"><h4>Author colors and “Mine” filter <span class="pill p2">phase 2</span></h4><p>Each author name maps to a stable hue for anchors, avatars and the panel filter. Makes a note reviewed by two people, or by you and an agent, readable at a glance.</p></div>
+    <div class="card"><h4>Accepted / Original preview <span class="pill p2">phase 2</span></h4><p>Read the note as it would be if everything were accepted or rejected, without touching the file. Useful before deciding, and for printing or exporting to PDF.</p></div>
+    <div class="card"><h4>Copy without markup <span class="pill p1">phase 1</span></h4><p>Optional clipboard transform so a paragraph copied out of a reviewed note comes out as accepted text.</p></div>
+    <div class="card"><h4>Comment labels <span class="pill p3">optional</span></h4><p>An optional <code>label="question"</code> attribute with a configurable set (question, edit, praise, note), shown as a small tag on the chip and card. Borrowed from Review Comments. Easy to add, easy to leave out; see the decisions below.</p></div>
+    <div class="card"><h4>Agent interoperability <span class="pill p2">phase 2</span></h4><p>Because the syntax matches Track Changes, its reviewer skill and the Claude Code plugin written for it already produce marks Critique renders. Critique ships its own short SKILL.md so an agent can review a note and reply in threads.</p></div>
+    <div class="card"><h4>Vault-wide review view <span class="pill p3">phase 3</span></h4><p>A second view listing open threads and pending changes across the vault, grouped by note, built from the metadata cache. Helps when review spans several notes.</p></div>
+    <div class="card"><h4>Suggestion mode <span class="pill p3">phase 3</span></h4><p>A toggle that turns ordinary typing into additions and deletions, as Commentator and Review Critic do. Valuable but the riskiest feature in this space; it is scoped last and gated behind the structural-safety rules Review Critic documents.</p></div>
+  </div>
+</section>
+
+<section id="architecture">
+  <h2>Architecture</h2>
+  <div class="prose">
+    <p>One parser feeds every surface. All writes go through one operations layer that anchors each edit to the text around it and re-validates before dispatching, so stale panel state can never corrupt the note.</p>
+  </div>
+  <div class="arch">
+    <div class="box"><b>Markdown note</b><span>The only source of truth. CriticMarkup with optional attribute prefixes.</span></div>
+    <div class="arrow">parse ↓ &nbsp;&nbsp; ↑ anchored edits</div>
+    <div class="box core"><b>Parser → MarkModel</b><span>Tolerant single-pass scanner that skips code, groups threads, resolves anchors and reads attributes. Lives in a CodeMirror StateField for open editors; runs on demand for Reading mode and the panel.</span></div>
+    <div class="arrow">consumed by ↓</div>
+    <div class="row">
+      <div class="box"><b>Editor decorations</b><span>Mark and replace decorations for Live Preview and Source; syntax dimming; cursor-in-mark reveal.</span></div>
+      <div class="box"><b>Indicator layer</b><span>View plugin positioning one element per thread at its line; same component reused in Reading mode.</span></div>
+      <div class="box"><b>Reading post-processor</b><span>Walks rendered text nodes, re-finds marks across element boundaries, applies styles, removes syntax, mounts indicators.</span></div>
+      <div class="box"><b>Review panel</b><span>ItemView; cards rendered from the model; inline editing; filters and sort.</span></div>
+      <div class="box"><b>Authoring</b><span>Selection toolbar, context menus, commands; reading-mode selection mapping.</span></div>
+      <div class="box"><b>Popovers</b><span>Hover card and thread popover, shared between editor and Reading mode.</span></div>
+    </div>
+    <div class="arrow">all writes go through ↓</div>
+    <div class="box core"><b>Operations</b><span>accept · reject · wrap · comment · reply · edit · resolve · delete · finalize. Each produces edits with expected text and preceding context; a rebase step re-finds them in the live document and drops anything ambiguous. Dispatches through the open editor (undo-friendly) or the vault API for closed notes.</span></div>
+  </div>
+  <div class="prose">
+    <h3>Known hard parts</h3>
+    <ul>
+      <li><b>Obsidian’s own parser sees the inner syntax.</b> <code>{~~old~&gt;new~~}</code> contains <code>~~…~~</code>, which Obsidian renders as strikethrough, and <code>{==…==}</code> contains a native highlight. In the editor the plugin’s decorations take precedence; in Reading mode the post-processor receives already-rendered <code>&lt;del&gt;</code> and <code>&lt;mark&gt;</code> elements and must re-find the mark across them. Track Changes and Review Critic both solve this and the approach is well understood.</li>
+      <li><b>Reading-mode selection mapping</b>, described under Authoring. The fallback to Live Preview keeps the feature usable even where alignment fails.</li>
+      <li><b>Marks spanning block boundaries</b> (a deletion covering two paragraphs) are legal CriticMarkup but break per-line rendering. The toolbar will split such a selection into one mark per paragraph, as word processors do.</li>
+      <li><b>Mobile.</b> The selection toolbar becomes a bottom sheet and the panel is a full-height drawer. Hover cards are replaced by tap-to-open. No desktop-only APIs are used.</li>
+    </ul>
+    <p>Stack: TypeScript, esbuild, the CodeMirror 6 packages Obsidian exposes, no runtime dependencies. Unit tests for the parser and operations run under Node without Obsidian; rendering is checked in a test vault.</p>
+  </div>
+</section>
+
+<section id="phases">
+  <h2>Phases</h2>
+  <div class="phase">
+    <div class="n">Phase 1<br><span class="pill p1">Foundation</span></div>
+    <div>Usable for solo review in the editor.
+      <ul>
+        <li>Parser with attribute prefixes, threads, anchors, code skipping; unit tests.</li>
+        <li>Rendering in Live Preview, Source and Reading mode, with all decoration options.</li>
+        <li>Selection toolbar, context menu and commands in Live Preview and Source.</li>
+        <li>Settings: signature, timestamps, colors, per-type styles, mark style (highlighted / dashed underline / off).</li>
+        <li>Accept and reject at cursor, selection and document; status bar count; copy without markup.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="n">Phase 2<br><span class="pill p2">Review</span></div>
+    <div>Usable for a two-person or human-plus-agent review.
+      <ul>
+        <li>Review panel with cards, inline editing, reply, resolve, filters, jump and sync.</li>
+        <li>Margin indicators in editor and Reading mode; thread popover; hover cards.</li>
+        <li>Authoring from Reading mode.</li>
+        <li>Accepted and Original preview modes; Finalize; strict export.</li>
+        <li>Author colors; agent SKILL.md.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="phase">
+    <div class="n">Phase 3<br><span class="pill p3">Reach</span></div>
+    <div>
+      <ul>
+        <li>Mobile polish (bottom sheet, drawer, touch targets).</li>
+        <li>Vault-wide review view.</li>
+        <li>Suggestion mode, behind a toggle and the structural-safety rules.</li>
+        <li>Community plugin submission.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="decisions" class="prose">
+  <h2>Decisions to make before building</h2>
+  <div class="callout"><b>Settled 2026-10-28.</b> All recommendations below were accepted. Comment labels (question 4) are included as an optional attribute, off by default. One addition: a global <b>Mark style</b> setting with Highlighted, Dashed underline, and Off (tray only), described under Rendering and Settings.</div>
+  <div class="q"><b>1. Metadata syntax</b> Attribute prefix (<code>{author="…" date="…"++text++}</code>) or strict CriticMarkup with metadata carried in an adjacent comment? <span class="rec">Recommended: the attribute prefix.</span> It is stripped on accept, is already produced by Track Changes and its agent tooling, and the strict export command covers external tools.</div>
+  <div class="q"><b>2. Multi-line comments</b> Store hard line breaks as a literal <code>\n</code> (keeps each comment on one line, matches Review Comments) or allow real newlines inside a comment? <span class="rec">Recommended: the escape.</span> It keeps paragraphs intact and makes threads unambiguous.</div>
+  <div class="q"><b>3. Timestamp format</b> ISO 8601 with local offset at minute precision (<code>2026-10-28T14:05-07:00</code>), or UTC with seconds? <span class="rec">Recommended: local offset, minutes.</span> Readable in Source mode, sorts correctly, and the precision is a setting anyway.</div>
+  <div class="q"><b>4. Comment labels</b> Include the optional <code>label</code> attribute and type picker in the comment popover, or keep comments untyped? No recommendation; it depends on whether you use question/edit/praise distinctions when reviewing.</div>
+  <div class="q"><b>5. Suggestion mode</b> Keep it in phase 3 as proposed, or drop it from scope entirely? <span class="rec">Recommended: keep it in phase 3</span> and decide after phases 1 and 2 are in daily use.</div>
+  <div class="q"><b>6. Name and id</b> “Critique”, plugin id <code>critique</code>, CSS prefix <code>cq-</code>. The id needs to be unique in the community list; “critique” is currently unused there.</div>
+</section>
+
+<footer>
+  Sources read for this proposal: the repositories for Commentator (Fevol/obsidian-criticmarkup), Track Changes (philphilphil/obsidian-track-changes), Review Comments (shotashirai1719/obsidian-review-comments) and Review Critic (rohrbachd/obsidian-review-critics), and the CriticMarkup specification. Mockup text is an invented example note.
+</footer>
+
+</div>

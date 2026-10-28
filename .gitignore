@@ -1,0 +1,7 @@
+node_modules/
+dist/
+*.map
+.DS_Store
+logs/
+audit.log
+.test-build/

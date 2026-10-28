@@ -1,0 +1,40 @@
+{
+  "name": "critique-obsidian",
+  "version": "0.1.0",
+  "description": "CriticMarkup review for Obsidian: one-gesture authoring, margin indicators, and a review panel.",
+  "main": "dist/main.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/melnicorn/critique-obsidian.git"
+  },
+  "homepage": "https://github.com/melnicorn/critique-obsidian",
+  "bugs": {
+    "url": "https://github.com/melnicorn/critique-obsidian/issues"
+  },
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "typecheck": "tsc -noEmit -skipLibCheck",
+    "test": "node scripts/test.mjs",
+    "install:vault": "node scripts/install-vault.mjs",
+    "clean": "rm -rf dist .test-build"
+  },
+  "keywords": [
+    "obsidian",
+    "criticmarkup",
+    "review"
+  ],
+  "author": "Chris Melnick",
+  "license": "MIT",
+  "devDependencies": {
+    "@codemirror/language": "^6.10.0",
+    "@codemirror/state": "^6.5.0",
+    "@codemirror/view": "^6.36.0",
+    "@types/node": "^22.0.0",
+    "builtin-modules": "^4.0.0",
+    "esbuild": "^0.25.0",
+    "obsidian": "^1.8.7",
+    "tslib": "^2.8.0",
+    "typescript": "^5.7.0"
+  }
+}

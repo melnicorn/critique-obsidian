@@ -1,0 +1,10 @@
+{
+  "id": "critique",
+  "name": "Critique",
+  "version": "0.1.0",
+  "minAppVersion": "1.8.0",
+  "description": "CriticMarkup review: mark additions, deletions, substitutions, highlights and comment threads from a selection in any mode, see them in the margin, and work through them in a review panel.",
+  "author": "Chris Melnick",
+  "authorUrl": "https://github.com/melnicorn",
+  "isDesktopOnly": false
+}
