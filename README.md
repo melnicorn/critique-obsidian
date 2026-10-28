@@ -73,6 +73,9 @@ left changes.
 mark, resolve the thread at the cursor, copy the selection or note without markup, copy or export
 the note as strict CriticMarkup (metadata folded into comment text), and cycling the mark style.
 
+**Undo.** Marks made in the editor are part of its normal undo history. In Reading mode, where no
+editor has focus, ⌘Z and ⇧⌘Z undo and redo Critique's own writes to the note (also as commands).
+
 **Panel and note stay in sync.** Hovering a mark lights up its card, hovering a card lights up its
 marks, and the card at the cursor is kept in view.
 

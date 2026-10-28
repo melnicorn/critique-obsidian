@@ -17,6 +17,7 @@ import { TYPE_ICON, TYPE_LABEL } from "./ui/dom";
 import { closeAllPopovers } from "./ui/popover";
 import { stripAgentHeader } from "./agent-header";
 import { PreviewModes } from "./preview-modes";
+import { VaultHistory } from "./vault-history";
 import { PREVIEW_LABEL, PREVIEW_MODES, previewModeField } from "./editor/preview";
 import { ThreadPopovers } from "./ui/thread-popover";
 
@@ -27,6 +28,7 @@ export default class CritiquePlugin extends Plugin {
   threadPopovers = new ThreadPopovers(this);
   reading = new ReadingMode(this);
   previews = new PreviewModes(this);
+  vaultHistory = new VaultHistory(this.app);
   private statusEl: HTMLElement | null = null;
 
   async onload(): Promise<void> {
@@ -57,6 +59,17 @@ export default class CritiquePlugin extends Plugin {
     this.registerDomEvent(document, "click", this.reading.onClick);
     this.registerDomEvent(document, "contextmenu", this.reading.onContextMenu);
     this.registerDomEvent(document, "selectionchange", () => this.reading.onSelectionChange(document));
+    // Undo and redo over a Reading-mode view, where no editor has focus.
+    this.registerDomEvent(document, "keydown", (ev) => {
+      if (!(ev.metaKey || ev.ctrlKey) || ev.altKey || ev.key.toLowerCase() !== "z") return;
+      const target = ev.target as HTMLElement | null;
+      if (target?.closest?.("input, textarea, [contenteditable=\"true\"], .cm-editor")) return;
+      const mv = this.activeMarkdown();
+      if (!mv || mv.getMode() !== "preview" || !mv.file) return;
+      ev.preventDefault();
+      if (ev.shiftKey) void this.vaultHistory.redo(mv.file);
+      else void this.vaultHistory.undo(mv.file);
+    });
 
     // Panel
     this.registerView(VIEW_TYPE_REVIEW, (leaf) => new ReviewView(leaf, this));
@@ -357,6 +370,27 @@ export default class CritiquePlugin extends Plugin {
       id: "copy-strict",
       name: "Copy note as strict CriticMarkup (no metadata)",
       editorCallback: (editor) => void this.copyStrict(parse(editor.getValue())),
+    });
+
+    this.addCommand({
+      id: "undo-reading",
+      name: "Undo last Critique action in Reading mode",
+      checkCallback: (checking) => {
+        const mv = this.activeMarkdown();
+        if (!mv || mv.getMode() !== "preview" || !mv.file) return false;
+        if (!checking) void this.vaultHistory.undo(mv.file);
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "redo-reading",
+      name: "Redo last Critique action in Reading mode",
+      checkCallback: (checking) => {
+        const mv = this.activeMarkdown();
+        if (!mv || mv.getMode() !== "preview" || !mv.file) return false;
+        if (!checking) void this.vaultHistory.redo(mv.file);
+        return true;
+      },
     });
 
     this.addCommand({

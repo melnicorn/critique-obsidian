@@ -94,14 +94,19 @@ export class Actions {
     }
     if (!t.file) return false;
     let ok = true;
+    let textBefore = "";
+    let textAfter = "";
     await this.app.vault.process(t.file, (data) => {
       const rebased = ops.rebaseAll(data, edits);
       if (!rebased) {
         ok = false;
         return data;
       }
-      return ops.applyEdits(data, rebased);
+      textBefore = data;
+      textAfter = ops.applyEdits(data, rebased);
+      return textAfter;
     });
+    if (ok) this.plugin.vaultHistory.record(t.file, textBefore, textAfter);
     return ok ? true : fail();
   }
 
