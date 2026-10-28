@@ -194,8 +194,9 @@ export function deleteComment(doc: string, parsed: ParseResult, comment: Mark): 
   return [edit(doc, prev.to, comment.to, "")];
 }
 
+/** Rewrite a mark's attributes. The edit covers the whole mark so it can be relocated by content. */
 function setAttrsEdit(doc: string, mark: Mark, attrs: Attrs): Edit {
-  return edit(doc, mark.metaFrom, mark.metaTo, metaString(attrs));
+  return edit(doc, mark.from, mark.to, "{" + metaString(attrs) + doc.slice(mark.metaTo, mark.to));
 }
 
 /** Replace the metadata prefix of a mark. */
@@ -211,15 +212,18 @@ export function setThreadStatus(doc: string, parsed: ParseResult, thread: Thread
   return setAttrs(doc, root, attrs);
 }
 
+/** Append a reply. The edit re-states the thread's last comment so it is anchored by content, not offset. */
 export function replyToThread(doc: string, parsed: ParseResult, thread: Thread, text: string, attrs: Attrs): Edit[] {
-  return [edit(doc, thread.to, thread.to, buildComment(text, { attrs }))];
+  const last = parsed.marks[thread.comments[thread.comments.length - 1]];
+  return [edit(doc, last.from, last.to, doc.slice(last.from, last.to) + buildComment(text, { attrs }))];
 }
 
-/** Replace a comment's text, optionally stamping `edited`. */
+/** Replace a comment's text, optionally stamping `edited`. One whole-mark edit, anchored by content. */
 export function editComment(doc: string, comment: Mark, text: string, edited?: string | null): Edit[] {
-  const edits = [edit(doc, comment.contentFrom, comment.contentTo, encodeCommentText(text))];
-  if (edited) edits.push(setAttrsEdit(doc, comment, { ...comment.meta.attrs, edited }));
-  return edits;
+  const attrs: Attrs = edited ? { ...comment.meta.attrs, edited } : comment.meta.attrs;
+  const meta = edited ? metaString(attrs) : doc.slice(comment.metaFrom, comment.metaTo);
+  const raw = "{" + meta + doc.slice(comment.metaTo, comment.contentFrom) + encodeCommentText(text) + doc.slice(comment.contentTo, comment.to);
+  return [edit(doc, comment.from, comment.to, raw)];
 }
 
 // ---------- Authoring ----------
@@ -273,17 +277,14 @@ export function insertMark(doc: string, parsed: ParseResult, selFrom: number, se
     const text = opts.comment ?? "";
     // Comment on an existing mark: attach to it (reply if it already has a thread).
     const target = container ?? exactMark(parsed, from, to);
-    if (target && target.type !== "comment") {
+    if (target) {
+      // Attach to the mark, or reply to its thread: re-state the mark the comment follows, so the
+      // edit is anchored by content rather than by offset.
       const thread = threadOf(parsed, target);
-      const at = thread ? thread.to : target.to;
+      const prev = thread ? parsed.marks[thread.comments[thread.comments.length - 1]] : target;
+      const at = prev.to;
       const s = buildComment(text, { attrs });
-      return { edits: [edit(doc, at, at, s)], cursor: text ? undefined : at + s.length - 3 };
-    }
-    if (target && target.type === "comment") {
-      const thread = threadOf(parsed, target);
-      const at = thread ? thread.to : target.to;
-      const s = buildComment(text, { attrs });
-      return { edits: [edit(doc, at, at, s)], cursor: text ? undefined : at + s.length - 3 };
+      return { edits: [edit(doc, prev.from, prev.to, doc.slice(prev.from, prev.to) + s)], cursor: text ? undefined : at + s.length - 3 };
     }
     if (from === to) {
       const s = buildComment(text, { attrs });

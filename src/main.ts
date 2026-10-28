@@ -5,6 +5,7 @@ import { Authoring } from "./authoring";
 import { decorationsField } from "./editor/decorations";
 import { hoverPlugin } from "./editor/hover";
 import { cursorSync } from "./editor/cursor-sync";
+import { tableCells } from "./editor/table-cells";
 import { parseField, parsedOf, settingsChanged, settingsFacet } from "./editor/state";
 import { selectionToolbar } from "./editor/toolbar";
 import { changesInRange, plainText, stripMetadata } from "./operations";
@@ -29,6 +30,8 @@ export default class CritiquePlugin extends Plugin {
   reading = new ReadingMode(this);
   previews = new PreviewModes(this);
   vaultHistory = new VaultHistory(this.app);
+  /** Distinguishes DOM decorated by this plugin instance from a previous one (plugin reloads). */
+  readonly instanceId = String(Date.now());
   private statusEl: HTMLElement | null = null;
 
   async onload(): Promise<void> {
@@ -50,6 +53,7 @@ export default class CritiquePlugin extends Plugin {
       selectionToolbar(this),
       hoverPlugin(this),
       cursorSync(this),
+      tableCells(this),
     ]);
 
     // Reading mode
@@ -83,6 +87,10 @@ export default class CritiquePlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       this.updateStatus();
       this.previews.attachAll();
+      // Reading views rendered before this instance loaded carry stale decorations: redraw them.
+      this.app.workspace.iterateAllLeaves((leaf) => {
+        if (leaf.view instanceof MarkdownView && leaf.view.getMode() === "preview") leaf.view.previewMode.rerender(true);
+      });
     });
     this.registerEvent(this.app.workspace.on("layout-change", () => this.previews.attachAll()));
 

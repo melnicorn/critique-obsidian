@@ -11,7 +11,7 @@ export function hoverPlugin(plugin: CritiquePlugin) {
       hoveredId: number | null = null;
       private readonly onOver = (ev: MouseEvent) => {
         const target = (ev.target as HTMLElement).closest?.("[data-cq-id]") as HTMLElement | null;
-        if (!target || !this.view.contentDOM.contains(target)) return;
+        if (!target || !this.view.contentDOM.contains(target) || target.closest(".cm-table-widget")) return;
         const id = Number(target.dataset.cqId);
         if (Number.isNaN(id)) return;
         plugin.panel()?.highlightMark(id);
@@ -28,6 +28,7 @@ export function hoverPlugin(plugin: CritiquePlugin) {
       };
       private readonly onOut = (ev: MouseEvent) => {
         const from = (ev.target as HTMLElement).closest?.("[data-cq-id]");
+        if (from?.closest(".cm-table-widget")) return;
         const to = (ev.relatedTarget as HTMLElement | null)?.closest?.("[data-cq-id]") ?? null;
         if (from && to === from) return;
         plugin.panel()?.highlightMark(null);
@@ -37,7 +38,7 @@ export function hoverPlugin(plugin: CritiquePlugin) {
       };
       private readonly onClick = (ev: MouseEvent) => {
         const chip = (ev.target as HTMLElement).closest?.(".cq-chip") as HTMLElement | null;
-        if (!chip) return;
+        if (!chip || chip.closest(".cm-table-widget")) return;
         ev.preventDefault();
         ev.stopPropagation();
         this.open(Number(chip.dataset.cqId), true);

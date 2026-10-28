@@ -61,16 +61,25 @@ export function byline(parent: HTMLElement, mark: Mark, fallbackAuthor: string, 
   return el;
 }
 
-/** Quote of a mark's content for cards: old → new for substitutions. */
+const QUOTE_MAX = 60;
+
+function clip(s: string, max = QUOTE_MAX): string {
+  const t = s.replace(/\s+/g, " ").trim();
+  return t.length > max ? t.slice(0, max - 1).trimEnd() + "…" : t;
+}
+
+/** Short quote of a mark's content for cards: old → new for substitutions. The full text is the tooltip. */
 export function quoteEl(parent: HTMLElement, mark: Mark): HTMLElement {
   const el = parent.createDiv({ cls: `cq-quote cq-quote-${mark.type}` });
   if (mark.type === "substitution") {
-    el.createSpan({ cls: "cq-del-text", text: mark.oldText ?? "" });
+    el.createSpan({ cls: "cq-del-text", text: clip(mark.oldText ?? "", QUOTE_MAX / 2) });
     el.createSpan({ cls: "cq-sub-arrow", text: " → " });
-    el.createSpan({ cls: "cq-add-text", text: mark.newText ?? "" });
+    el.createSpan({ cls: "cq-add-text", text: clip(mark.newText ?? "", QUOTE_MAX / 2) });
+    el.setAttribute("title", `${mark.oldText ?? ""} → ${mark.newText ?? ""}`);
   } else {
     const cls = mark.type === "addition" ? "cq-add-text" : mark.type === "deletion" ? "cq-del-text" : "";
-    el.createSpan({ cls, text: mark.text });
+    el.createSpan({ cls, text: clip(mark.text) });
+    el.setAttribute("title", mark.text);
   }
   return el;
 }

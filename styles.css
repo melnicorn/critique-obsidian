@@ -58,11 +58,11 @@ body {
 /* Obsidian parses the inner ~~ and == itself; undo its styling where our marks sit. */
 .cm-s-obsidian span.cm-strikethrough:has(.cq-sub-old), .cm-s-obsidian span.cm-strikethrough:has(.cq-sub-new), .cm-s-obsidian span.cm-strikethrough:has(.cq-syntax.cq-sep), .cm-s-obsidian span.cm-strikethrough:has(.cq-keep) { text-decoration: none; }
 .cm-s-obsidian span.cm-highlight:has(.cq-hl-text), .cm-s-obsidian span.cm-highlight:has(.cq-mark), .cm-s-obsidian span.cm-highlight:has(.cq-keep) { background: none; color: inherit; }
-.markdown-preview-view del:has(.cq-sub-old), .markdown-preview-view del:has(.cq-sub-new), .markdown-preview-view del:has(.cq-sub-arrow) { text-decoration: none; }
-.markdown-preview-view mark:has(.cq-hl-text), .markdown-preview-view mark:has(.cq-mark) { background: none; color: inherit; }
+.markdown-rendered del:has(.cq-sub-old), .markdown-rendered del:has(.cq-sub-new), .markdown-rendered del:has(.cq-sub-arrow) { text-decoration: none; }
+.markdown-rendered mark:has(.cq-hl-text), .markdown-rendered mark:has(.cq-mark) { background: none; color: inherit; }
 
 /* ---------- Reading mode ---------- */
-.markdown-preview-view .cq-hidden { display: none; }
+.markdown-rendered .cq-hidden { display: none; }
 .cq-rd-section { position: relative; }
 .cq-hide-marks-reading .markdown-preview-view .cq-del-text,
 .cq-hide-marks-reading .markdown-preview-view .cq-sub-arrow,
@@ -77,20 +77,20 @@ body {
 .cq-guide-chip svg { width: 11px; height: 11px; }
 
 /* ---------- Preview modes in Reading mode (the editor uses decorations) ---------- */
-.cq-preview-accepted .markdown-preview-view .cq-del-text,
-.cq-preview-original .markdown-preview-view .cq-add-text,
-.cq-preview-accepted .markdown-preview-view .cq-sub-arrow,
-.cq-preview-original .markdown-preview-view .cq-sub-arrow,
-.cq-preview-accepted .markdown-preview-view .cq-chip,
-.cq-preview-original .markdown-preview-view .cq-chip,
-.cq-preview-accepted .markdown-preview-view .cq-tray-host,
-.cq-preview-original .markdown-preview-view .cq-tray-host { display: none; }
-.cq-preview-accepted .markdown-preview-view .cq-add-text,
-.cq-preview-accepted .markdown-preview-view .cq-hl-text,
-.cq-preview-original .markdown-preview-view .cq-del-text,
-.cq-preview-original .markdown-preview-view .cq-hl-text { color: inherit; text-decoration: none; font-weight: inherit; }
-.cq-preview-accepted .markdown-preview-view .cq-mark,
-.cq-preview-original .markdown-preview-view .cq-mark { background: none; border: none; opacity: 1; }
+.cq-preview-accepted .markdown-rendered .cq-del-text,
+.cq-preview-original .markdown-rendered .cq-add-text,
+.cq-preview-accepted .markdown-rendered .cq-sub-arrow,
+.cq-preview-original .markdown-rendered .cq-sub-arrow,
+.cq-preview-accepted .markdown-rendered .cq-chip,
+.cq-preview-original .markdown-rendered .cq-chip,
+.cq-preview-accepted .markdown-rendered .cq-tray-host,
+.cq-preview-original .markdown-rendered .cq-tray-host { display: none; }
+.cq-preview-accepted .markdown-rendered .cq-add-text,
+.cq-preview-accepted .markdown-rendered .cq-hl-text,
+.cq-preview-original .markdown-rendered .cq-del-text,
+.cq-preview-original .markdown-rendered .cq-hl-text { color: inherit; text-decoration: none; font-weight: inherit; }
+.cq-preview-accepted .markdown-rendered .cq-mark,
+.cq-preview-original .markdown-rendered .cq-mark { background: none; border: none; opacity: 1; }
 .view-action.is-active svg { color: var(--interactive-accent); }
 
 /* ---------- Comment chip (standalone thread) ---------- */
@@ -174,7 +174,8 @@ body {
 .cq-author { font-weight: 600; color: var(--text-normal); }
 .cq-time { color: var(--text-faint); }
 .cq-label { font-size: 10px; padding: 0 5px; border-radius: 6px; border: 1px solid var(--background-modifier-border); color: var(--text-muted); }
-.cq-quote { padding: 4px 8px; margin: 4px 0; border-left: 2px solid var(--background-modifier-border); color: var(--text-normal); white-space: pre-wrap; word-break: break-word; max-height: 8em; overflow: auto; }
+.cq-quote { padding: 2px 8px; margin: 4px 0; border-left: 2px solid var(--background-modifier-border); color: var(--text-normal); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-table-widget .cq-rd-section { position: static; }
 .cq-messages { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .cq-msg { padding: 4px 0; border-top: 1px solid var(--background-modifier-border); }
 .cq-msg:first-child { border-top: none; }

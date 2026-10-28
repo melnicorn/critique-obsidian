@@ -18,6 +18,34 @@ interface SectionInfo {
   parsed: ParseResult;
   map: Int32Array | null;
   rendered: string | null;
+  /** True when `text` was rebuilt from the rendered DOM (no section info): offsets are not file offsets. */
+  virtual: boolean;
+}
+
+/**
+ * Rebuild Markdown-ish source from rendered HTML so the parser can find marks in content that has no
+ * section info (Live Preview table cells, embeds). Obsidian has already turned the inner `==`/`~~`
+ * into <mark>/<del>, so those are put back; bold, italics and code are restored too so a mark's raw
+ * text matches the file closely enough for edits to be relocated by content.
+ */
+function pseudoSource(root: Node): string {
+  let out = "";
+  const wrap: Record<string, string> = { MARK: "==", DEL: "~~", S: "~~", STRONG: "**", B: "**", EM: "*", I: "*", CODE: "`" };
+  const walk = (n: Node) => {
+    if (n.nodeType === Node.TEXT_NODE) {
+      out += (n as Text).data;
+      return;
+    }
+    if (n.nodeType !== Node.ELEMENT_NODE) return;
+    const el = n as HTMLElement;
+    if (el.closest(".cq-tray-host, .cq-chip, .cq-sub-arrow") && el.matches(".cq-tray-host, .cq-chip, .cq-sub-arrow")) return;
+    const w = wrap[el.tagName] ?? "";
+    out += w;
+    for (const c of Array.from(el.childNodes)) walk(c);
+    out += w;
+  };
+  walk(root);
+  return out;
 }
 
 interface Segment {
@@ -74,7 +102,10 @@ export class ReadingMode {
 
   readonly postProcessor = (el: HTMLElement, ctx: MarkdownPostProcessorContext): void => {
     const info = ctx.getSectionInfo(el);
-    if (!info) return;
+    if (!info) {
+      this.decorateRendered(el, ctx.sourcePath);
+      return;
+    }
     const lines = info.text.split("\n");
     let from = 0;
     for (let i = 0; i < info.lineStart && i < lines.length; i++) from += lines[i].length + 1;
@@ -82,13 +113,32 @@ export class ReadingMode {
     for (let i = info.lineStart; i <= info.lineEnd && i < lines.length; i++) to += lines[i].length + 1;
     to = Math.min(to - 1, info.text.length);
     const parsed = this.parseCached(info.text);
-    const section: SectionInfo = { text: info.text, from, to, sourcePath: ctx.sourcePath, parsed, map: null, rendered: null };
+    const section: SectionInfo = { text: info.text, from, to, sourcePath: ctx.sourcePath, parsed, map: null, rendered: null, virtual: false };
     this.sections.set(el, section);
     el.dataset.cqSection = "1";
     const marks = parsed.marks.filter((m) => m.from >= from && m.to <= to);
     if (!marks.length) return;
     this.decorate(el, section, marks);
   };
+
+  /** Decorate rendered content that has no section info, working from the DOM alone. */
+  decorateRendered(el: HTMLElement, sourcePath: string): void {
+    if (!el.textContent?.includes("{")) return;
+    const text = pseudoSource(el);
+    const parsed = parse(text);
+    if (!parsed.marks.length) return;
+    const section: SectionInfo = { text, from: 0, to: text.length, sourcePath, parsed, map: null, rendered: null, virtual: true };
+    this.sections.set(el, section);
+    // Already decorated (by an earlier plugin instance, say): keep the DOM, just re-register the section.
+    if (el.dataset.cqSection) return;
+    el.dataset.cqSection = "virtual";
+    this.decorate(el, section, parsed.marks);
+  }
+
+  /** True when this instance knows the section an element belongs to. */
+  knows(el: HTMLElement): boolean {
+    return this.sections.has(el);
+  }
 
   private ensureAligned(el: HTMLElement, section: SectionInfo): { runs: TextRun[]; map: Int32Array } {
     const { runs, text } = textRuns(el);
@@ -154,7 +204,7 @@ export class ReadingMode {
         seg(m.contentTo, m.to, "cq-hidden");
       }
 
-      if (wantsIndicator(m, thread, s)) {
+      if (!section.virtual && wantsIndicator(m, thread, s)) {
         const g = trays.get(m.line) ?? { items: [], at: r(m.from) };
         const rootAuthor = thread ? parsed.marks[thread.comments[0]].meta.author : m.meta.author;
         g.items.push({ markId: m.id, type: m.type, count: thread ? thread.comments.length : 1, resolved: !!thread?.resolved, author: rootAuthor });
@@ -295,7 +345,7 @@ export class ReadingMode {
   // ---------- Hover and click on marks ----------
 
   readonly onMouseOver = (ev: MouseEvent): void => {
-    const target = (ev.target as HTMLElement).closest?.<HTMLElement>(".markdown-preview-view [data-cq-id]");
+    const target = (ev.target as HTMLElement).closest?.<HTMLElement>(".markdown-preview-view [data-cq-id], .cm-table-widget [data-cq-id]");
     if (!target || target.classList.contains("cq-tray-item")) return;
     const sectionEl = target.closest<HTMLElement>("[data-cq-section]");
     const section = sectionEl ? this.sections.get(sectionEl) : null;
@@ -312,7 +362,7 @@ export class ReadingMode {
   private hoverTimer: number | null = null;
 
   readonly onMouseOut = (ev: MouseEvent): void => {
-    const from = (ev.target as HTMLElement).closest?.(".markdown-preview-view [data-cq-id]");
+    const from = (ev.target as HTMLElement).closest?.(".markdown-preview-view [data-cq-id], .cm-table-widget [data-cq-id]");
     if (!from) return;
     const to = (ev.relatedTarget as HTMLElement | null)?.closest?.("[data-cq-id]") ?? null;
     if (to === from) return;
@@ -325,7 +375,7 @@ export class ReadingMode {
   };
 
   readonly onClick = (ev: MouseEvent): void => {
-    const chip = (ev.target as HTMLElement).closest?.<HTMLElement>(".markdown-preview-view .cq-chip");
+    const chip = (ev.target as HTMLElement).closest?.<HTMLElement>(".markdown-preview-view .cq-chip, .cm-table-widget .cq-chip");
     if (!chip) return;
     const sectionEl = chip.closest<HTMLElement>("[data-cq-section]");
     const section = sectionEl ? this.sections.get(sectionEl) : null;
@@ -346,7 +396,7 @@ export class ReadingMode {
     if (!startEl || !endEl) return null;
     const a = this.sections.get(startEl);
     const b = this.sections.get(endEl);
-    if (!a || !b || a.text !== b.text) return null;
+    if (!a || !b || a.text !== b.text || a.virtual) return null;
     const from = this.domToSource(startEl, a, range.startContainer, range.startOffset, "start");
     const to = this.domToSource(endEl, b, range.endContainer, range.endOffset, "end");
     if (from === null || to === null || to <= from) return null;
