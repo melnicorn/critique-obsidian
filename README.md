@@ -62,3 +62,20 @@ node scripts/install-vault.mjs "/path/to/vault"   # copy dist/ into <vault>/.obs
 screenshots and DOM checks (`node scripts/cdp.mjs eval '<js>'`, `… shot out.png [selector]`).
 
 Minimum Obsidian version: 1.8.0.
+
+## CI and releases
+
+Every push and pull request runs tests and a build (`.github/workflows/build.yml`) and uploads the
+built files as a workflow artifact. A release is manual:
+
+```
+gh workflow run build.yml -R melnicorn/critique-obsidian --ref main -f build_type="Build & Release"
+```
+
+The version comes from `version` in `package.json`, which is only a `major.minor` floor: the patch
+auto-increments from the latest existing tag, and raising the floor resets it. Tags have no `v`
+prefix (`0.1.3`) because Obsidian requires the release tag to equal `manifest.json`'s version; the
+workflow stamps the computed version into the released manifest, so the repo copy keeps the floor.
+Each release attaches `main.js`, `manifest.json`, `styles.css` and `critique-<version>.tar.gz`.
+Release notes are written by Gemini when the `GEMINI_API_KEY` repository secret is set, and by
+GitHub's generated notes otherwise.

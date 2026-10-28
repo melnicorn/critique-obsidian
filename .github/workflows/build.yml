@@ -1,0 +1,264 @@
+# Build and test on every push and pull request. A manual run with "Build & Release" also
+# computes the next version, tags the commit and publishes a GitHub release.
+#
+# Tag format: {major}.{minor}.{patch}, with no "v" prefix, because Obsidian requires a release
+# tag that equals the version in manifest.json.
+#
+# Version computation (driven by "version" in package.json, which is only a major.minor floor):
+#   - No tags yet                                   → {major}.{minor}.0 from package.json
+#   - Latest tag major < package.json major         → bump to package.json major.minor, patch 0
+#   - Latest tag minor < package.json minor         → bump to package.json minor, patch 0
+#   - Otherwise                                     → increment patch
+#
+# Release assets: main.js, manifest.json, styles.css (what Obsidian needs, individually) and
+# critique-{version}.tar.gz holding the same three files in a critique/ folder.
+#
+# Secrets: GEMINI_API_KEY (optional) for AI release notes; without it GitHub's generated notes are used.
+
+name: Build
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: 'Action to perform'
+        type: choice
+        options:
+          - Build only
+          - Build & Release
+        default: 'Build only'
+
+jobs:
+  build:
+    name: Build & test
+    runs-on: ubuntu-24.04
+    outputs:
+      version:      ${{ steps.version.outputs.version }}
+      tag:          ${{ steps.version.outputs.tag }}
+      previous_tag: ${{ steps.version.outputs.previous_tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # Full history + tags required for version computation
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compute next release version
+        id: version
+        if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'Build & Release'
+        run: |
+          set -euo pipefail
+
+          # ── Read the floor from package.json ─────────────────────────────
+          TMPL=$(node -p "require('./package.json').version")
+          TMPL_MAJOR=$(echo "$TMPL" | cut -d. -f1)
+          TMPL_MINOR=$(echo "$TMPL" | cut -d. -f2)
+          echo "Floor version   : ${TMPL} (major≥${TMPL_MAJOR}, minor≥${TMPL_MINOR})"
+
+          # ── Latest existing release tag ───────────────────────────────────
+          LATEST=$(git tag -l | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1 || true)
+          echo "Latest tag      : ${LATEST:-<none>}"
+
+          # ── Compute next version ──────────────────────────────────────────
+          if [ -z "$LATEST" ]; then
+            NEW_VERSION="${TMPL_MAJOR}.${TMPL_MINOR}.0"
+            PREVIOUS_TAG=""
+          else
+            PREVIOUS_TAG="$LATEST"
+            CUR_MAJOR=$(echo "$LATEST" | cut -d. -f1)
+            CUR_MINOR=$(echo "$LATEST" | cut -d. -f2)
+            CUR_PATCH=$(echo "$LATEST" | cut -d. -f3)
+            if [ "$TMPL_MAJOR" -gt "$CUR_MAJOR" ]; then
+              NEW_VERSION="${TMPL_MAJOR}.${TMPL_MINOR}.0"
+            elif [ "$TMPL_MINOR" -gt "$CUR_MINOR" ]; then
+              NEW_VERSION="${CUR_MAJOR}.${TMPL_MINOR}.0"
+            else
+              NEW_VERSION="${CUR_MAJOR}.${CUR_MINOR}.$(( CUR_PATCH + 1 ))"
+            fi
+          fi
+
+          echo "New version     : ${NEW_VERSION}"
+          echo "version=${NEW_VERSION}"      >> "$GITHUB_OUTPUT"
+          echo "tag=${NEW_VERSION}"          >> "$GITHUB_OUTPUT"
+          echo "previous_tag=${PREVIOUS_TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # The release carries the computed version in manifest.json (the repo keeps the floor).
+      - name: Stamp release version into manifest
+        if: steps.version.outputs.version != ''
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const m = JSON.parse(fs.readFileSync("dist/manifest.json", "utf8"));
+            m.version = process.env.VERSION;
+            fs.writeFileSync("dist/manifest.json", JSON.stringify(m, null, 2) + "\n");
+          '
+          cat dist/manifest.json
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: critique
+          path: |
+            dist/main.js
+            dist/manifest.json
+            dist/styles.css
+          if-no-files-found: error
+
+  release:
+    name: Tag & Release
+    runs-on: ubuntu-24.04
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'Build & Release' && needs.build.result == 'success'
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: critique
+          path: dist/
+
+      - name: Package tarball
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p package/critique
+          cp dist/main.js dist/manifest.json dist/styles.css package/critique/
+          tar -czf "critique-${VERSION}.tar.gz" -C package critique
+          tar -tzf "critique-${VERSION}.tar.gz"
+
+      - name: Create git tag
+        env:
+          TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$TAG"
+          git push origin "$TAG"
+
+      - name: Generate release notes
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PREVIOUS_TAG:   ${{ needs.build.outputs.previous_tag }}
+        run: |
+          set -e -E
+
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "GEMINI_API_KEY is not set, skipping AI generation."
+            exit 0
+          fi
+
+          MODEL_ID="gemini-3.1-flash-lite"
+          GENERATE_CONTENT_API="generateContent"
+
+          if [ -z "$PREVIOUS_TAG" ]; then
+            echo "First release detected. Fetching all commits."
+            COMMITS=$(git log HEAD --no-merges --pretty=format:'%s%n%b')
+          else
+            echo "Fetching commits from ${PREVIOUS_TAG} to HEAD."
+            COMMITS=$(git log "${PREVIOUS_TAG}..HEAD" --no-merges --pretty=format:'%s%n%b')
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            echo "No commits found to summarize."
+            exit 0
+          fi
+
+          PROMPT="You are a release assistant that summarizes Git commit histories into clear, human-readable release notes for an Obsidian plugin.
+
+          Guidelines:
+          - Write the first line as a succinct one-sentence title (for example, ‘Adds a review panel and fixes Reading mode selection’), then include a blank line followed by formatted release notes.
+          - Group related changes together under headers (✨ Features, 🐛 Fixes, 🧹 Maintenance).
+          - Ignore trivial commits like version bumps or formatting.
+          - Be concise and professional (5–10 short bullet points max).
+          - Do not include commit hashes, author names, or dates.
+          - Do not include any other detail than the summary (e.g., no 'here's the summary'). The only output should be the markdown that will be used as the release body.
+
+          Now summarize the following commit history:
+          ---
+          $COMMITS
+          ---"
+
+          RESPONSE=$(jq -n --arg text "$PROMPT" '{
+            contents: [{role: "user", parts: [{text: $text}]}],
+            generationConfig: {temperature: 0.7}
+          }' | curl -s -X POST \
+            -H "Content-Type: application/json" \
+            "https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:${GENERATE_CONTENT_API}?key=${GEMINI_API_KEY}" \
+            -d @-)
+
+          if ! echo "$RESPONSE" | jq -e . >/dev/null 2>&1; then
+            echo "❌ Invalid JSON response from Gemini API:"
+            echo "$RESPONSE"
+            exit 1
+          fi
+
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
+
+          if [ -z "$SUMMARY" ]; then
+            echo "❌ No summary text returned. Full response:"
+            echo "$RESPONSE"
+            # Proceed without AI notes; GitHub's generated notes are used instead.
+            exit 0
+          fi
+
+          echo "$SUMMARY" > release_notes.md
+          echo "Generated AI release notes successfully."
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN:  ${{ github.token }}
+          TAG:       ${{ needs.build.outputs.tag }}
+          VERSION:   ${{ needs.build.outputs.version }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          MIN_APP=$(node -p "require('./dist/manifest.json').minAppVersion")
+          {
+            echo "## ${REPO_NAME} — v${VERSION}"
+            echo
+            echo "**Minimum Obsidian version:** ${MIN_APP}"
+            echo
+            echo "Install by copying \`main.js\`, \`manifest.json\` and \`styles.css\` into \`<vault>/.obsidian/plugins/critique/\`, or unpack \`critique-${VERSION}.tar.gz\` into \`<vault>/.obsidian/plugins/\`."
+            echo
+            echo "---"
+            echo
+          } > final_notes.md
+
+          ASSETS=(dist/main.js dist/manifest.json dist/styles.css "critique-${VERSION}.tar.gz")
+          if [ -f release_notes.md ]; then
+            cat release_notes.md >> final_notes.md
+            gh release create "$TAG" "${ASSETS[@]}" --title "v${VERSION}" --notes-file final_notes.md
+          else
+            gh release create "$TAG" "${ASSETS[@]}" --title "v${VERSION}" --notes-file final_notes.md --generate-notes
+          fi
