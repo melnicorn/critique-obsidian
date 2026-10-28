@@ -3,6 +3,8 @@ import { ItemView, MarkdownView, Menu, TFile, debounce, type WorkspaceLeaf } fro
 import type CritiquePlugin from "../main";
 import { counts, parse, type Mark, type ParseResult } from "../parser";
 import { collectItems, itemMatchesMine, itemThread, renderItem, type CardHost, type Item } from "../ui/card";
+import { isChange } from "../parser";
+import { normalizeAuthor } from "../authors";
 import { button, iconButton } from "../ui/dom";
 import type { PanelFilter } from "../settings";
 import type { Target } from "../actions";
@@ -111,6 +113,20 @@ export class ReviewView extends ItemView {
       const menu = new Menu();
       menu.addItem((i) => i.setTitle("Accept all changes").setIcon("check-check").onClick(() => void this.plugin.actions.decideAll(this.target(), parsed, "accept").then(() => this.afterChange())));
       menu.addItem((i) => i.setTitle("Reject all changes").setIcon("x").onClick(() => void this.plugin.actions.decideAll(this.target(), parsed, "reject").then(() => this.afterChange())));
+      // Per-author bulk actions, when more than one author left changes.
+      const authors = new Map<string, string | null>();
+      for (const m of parsed.marks) if (isChange(m)) authors.set(normalizeAuthor(m.meta.author), m.meta.author);
+      if (authors.size > 1) {
+        menu.addSeparator();
+        for (const author of authors.values()) {
+          const label = author ?? "unsigned";
+          menu.addItem((i) => i.setTitle(`Accept all changes by ${label}`).setIcon("check").onClick(() => void this.plugin.actions.decideAllBy(this.target(), parsed, "accept", author).then(() => this.afterChange())));
+          menu.addItem((i) => i.setTitle(`Reject all changes by ${label}`).setIcon("x").onClick(() => void this.plugin.actions.decideAllBy(this.target(), parsed, "reject", author).then(() => this.afterChange())));
+        }
+      }
+      menu.addSeparator();
+      menu.addItem((i) => i.setTitle("Finalize note…").setIcon("file-check").onClick(() => void this.plugin.actions.finalize(this.target()).then(() => this.afterChange())));
+      menu.addItem((i) => i.setTitle("Export strict CriticMarkup copy").setIcon("file-output").onClick(() => void this.plugin.actions.exportStrict(this.target())));
       menu.addSeparator();
       menu.addItem((i) => i.setTitle("Copy note without markup").setIcon("copy").onClick(() => void this.plugin.copyPlain(parsed)));
       menu.addItem((i) => i.setTitle("Copy as strict CriticMarkup").setIcon("clipboard-copy").onClick(() => void this.plugin.copyStrict(parsed)));
@@ -164,6 +180,7 @@ export class ReviewView extends ItemView {
       jumpTo: (m) => this.jumpTo(m),
       afterChange: () => this.afterChange(),
       setBusy: (b) => this.setBusy(b),
+      hoverMarks: (ids) => this.hoverMarks(ids),
     };
 
     const items = collectItems(parsed).filter((it) => this.passes(it, host));
@@ -225,6 +242,44 @@ export class ReviewView extends ItemView {
         window.setTimeout(() => mv.containerEl.querySelector<HTMLElement>(`.markdown-preview-view [data-cq-id="${m.id}"]:not(.cq-hidden)`)?.scrollIntoView({ block: "center" }), 150);
       }
     }
+  }
+
+  /** Light up the card that covers a mark while the pointer is over it in the note. */
+  highlightMark(id: number | null): void {
+    for (const card of this.listEl.querySelectorAll<HTMLElement>(".cq-card.cq-hover")) card.classList.remove("cq-hover");
+    if (id === null) return;
+    const card = this.cardFor(id);
+    card?.classList.add("cq-hover");
+  }
+
+  /** Keep the card at the cursor in view. */
+  followCursor(file: TFile | null, pos: number): void {
+    if (!file || file !== this.file || !this.parsed) return;
+    const item = collectItems(this.parsed).find((it) => pos >= it.from && pos <= it.to);
+    const current = this.listEl.querySelector<HTMLElement>(".cq-card.cq-current");
+    const card = item ? this.listEl.querySelector<HTMLElement>(`.cq-card[data-cq-from="${item.from}"]`) : null;
+    if (current === card) return;
+    current?.classList.remove("cq-current");
+    if (card) {
+      card.classList.add("cq-current");
+      card.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  private cardFor(id: number): HTMLElement | null {
+    for (const card of this.listEl.querySelectorAll<HTMLElement>(".cq-card[data-cq-ids]")) {
+      if ((card.dataset.cqIds ?? "").split(",").includes(String(id))) return card;
+    }
+    return null;
+  }
+
+  /** Light up the marks in the note while the pointer is over a card. */
+  private hoverMarks(ids: number[] | null): void {
+    const mv = this.file ? this.markdownViewFor(this.file) : null;
+    if (!mv) return;
+    for (const el of mv.containerEl.querySelectorAll<HTMLElement>(".cq-flash")) el.classList.remove("cq-flash");
+    if (!ids) return;
+    for (const id of ids) for (const el of mv.containerEl.querySelectorAll<HTMLElement>(`[data-cq-id="${id}"]:not(.cq-hidden)`)) el.classList.add("cq-flash");
   }
 
   /** Scroll the panel to the card for a mark. */

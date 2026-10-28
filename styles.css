@@ -56,8 +56,8 @@ body {
 .cq-meta-chip { display: inline-block; font-size: 0.75em; line-height: 1.4; padding: 0 5px; margin-right: 2px; border-radius: 8px; background: var(--background-modifier-hover); color: var(--text-muted); vertical-align: 1px; }
 
 /* Obsidian parses the inner ~~ and == itself; undo its styling where our marks sit. */
-.cm-s-obsidian span.cm-strikethrough:has(.cq-sub-old), .cm-s-obsidian span.cm-strikethrough:has(.cq-sub-new), .cm-s-obsidian span.cm-strikethrough:has(.cq-syntax.cq-sep) { text-decoration: none; }
-.cm-s-obsidian span.cm-highlight:has(.cq-hl-text), .cm-s-obsidian span.cm-highlight:has(.cq-mark) { background: none; color: inherit; }
+.cm-s-obsidian span.cm-strikethrough:has(.cq-sub-old), .cm-s-obsidian span.cm-strikethrough:has(.cq-sub-new), .cm-s-obsidian span.cm-strikethrough:has(.cq-syntax.cq-sep), .cm-s-obsidian span.cm-strikethrough:has(.cq-keep) { text-decoration: none; }
+.cm-s-obsidian span.cm-highlight:has(.cq-hl-text), .cm-s-obsidian span.cm-highlight:has(.cq-mark), .cm-s-obsidian span.cm-highlight:has(.cq-keep) { background: none; color: inherit; }
 .markdown-preview-view del:has(.cq-sub-old), .markdown-preview-view del:has(.cq-sub-new), .markdown-preview-view del:has(.cq-sub-arrow) { text-decoration: none; }
 .markdown-preview-view mark:has(.cq-hl-text), .markdown-preview-view mark:has(.cq-mark) { background: none; color: inherit; }
 
@@ -76,6 +76,23 @@ body {
 .cq-guide-chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 8px; font-size: 0.75em; color: var(--text-muted); background: var(--background-modifier-hover); vertical-align: 1px; cursor: text; }
 .cq-guide-chip svg { width: 11px; height: 11px; }
 
+/* ---------- Preview modes in Reading mode (the editor uses decorations) ---------- */
+.cq-preview-accepted .markdown-preview-view .cq-del-text,
+.cq-preview-original .markdown-preview-view .cq-add-text,
+.cq-preview-accepted .markdown-preview-view .cq-sub-arrow,
+.cq-preview-original .markdown-preview-view .cq-sub-arrow,
+.cq-preview-accepted .markdown-preview-view .cq-chip,
+.cq-preview-original .markdown-preview-view .cq-chip,
+.cq-preview-accepted .markdown-preview-view .cq-tray-host,
+.cq-preview-original .markdown-preview-view .cq-tray-host { display: none; }
+.cq-preview-accepted .markdown-preview-view .cq-add-text,
+.cq-preview-accepted .markdown-preview-view .cq-hl-text,
+.cq-preview-original .markdown-preview-view .cq-del-text,
+.cq-preview-original .markdown-preview-view .cq-hl-text { color: inherit; text-decoration: none; font-weight: inherit; }
+.cq-preview-accepted .markdown-preview-view .cq-mark,
+.cq-preview-original .markdown-preview-view .cq-mark { background: none; border: none; opacity: 1; }
+.view-action.is-active svg { color: var(--interactive-accent); }
+
 /* ---------- Comment chip (standalone thread) ---------- */
 .cq-chip { display: inline-flex; align-items: center; gap: 2px; vertical-align: -2px; margin: 0 1px; padding: 0 4px; height: 1.2em; border-radius: 6px; font-size: 0.72em; font-weight: 600; cursor: pointer; color: var(--cq-c, var(--cq-cmt)); background: color-mix(in srgb, var(--cq-c, var(--cq-cmt)) 16%, transparent); --cq-c: var(--cq-cmt); }
 .cq-color-authors .cq-chip { --cq-c: var(--cq-author, var(--cq-cmt)); }
@@ -85,7 +102,9 @@ body {
 /* ---------- Margin tray ---------- */
 .markdown-source-view.mod-cm6 .cm-line { position: relative; }
 .cq-tray-host { display: inline-block; width: 0; height: 0; overflow: visible; vertical-align: top; }
-.cq-tray { position: absolute; left: calc(100% + 4px); top: auto; display: inline-flex; flex-direction: column; gap: 2px; align-items: flex-start; white-space: nowrap; z-index: 3; }
+.cq-tray { position: absolute; left: calc(100% + 4px); top: auto; display: inline-flex; flex-direction: row; align-items: center; white-space: nowrap; z-index: 3; }
+.cq-tray .cq-tray-item + .cq-tray-item { margin-left: -7px; }
+.cq-tray .cq-tray-item:hover { z-index: 1; }
 .cq-tray-item { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; gap: 1px; min-width: 18px; height: 18px; padding: 0 3px; border-radius: 9px; cursor: pointer; color: var(--cq-c, var(--cq-cmt)); background: color-mix(in srgb, var(--cq-c, var(--cq-cmt)) 14%, var(--background-primary)); border: 1px solid color-mix(in srgb, var(--cq-c, var(--cq-cmt)) 45%, transparent); }
 .cq-tray-item:hover { background: color-mix(in srgb, var(--cq-c, var(--cq-cmt)) 28%, var(--background-primary)); }
 .cq-tray-item svg { width: 11px; height: 11px; }
@@ -138,6 +157,8 @@ body {
 .cq-card-thread, .cq-card-highlight.cq-has-msgs { --cq-c: var(--cq-cmt); }
 .cq-card.cq-resolved { opacity: 0.7; }
 .cq-card.cq-flash { box-shadow: 0 0 0 2px var(--interactive-accent); }
+.cq-card.cq-hover { border-color: var(--interactive-accent); }
+.cq-card.cq-current { background: var(--background-secondary); }
 .cq-card:not(.cq-compact):hover { border-color: var(--background-modifier-border-hover); }
 .cq-card-head { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
 .cq-card-type { font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
@@ -183,6 +204,11 @@ body {
 .cq-toggle { border: 1px solid var(--background-modifier-border); background: none; box-shadow: none; }
 .cq-panel-list { flex: 1; overflow: auto; padding: 8px 10px; }
 .cq-empty { color: var(--text-muted); font-size: var(--font-ui-small); padding: 12px 4px; text-align: center; }
+
+/* ---------- Settings ---------- */
+.cq-author-row .setting-item-info { display: none; }
+.cq-author-row .setting-item-control { justify-content: flex-start; }
+.cq-author-row input[type="text"] { flex: 1; }
 
 /* ---------- Status bar ---------- */
 .cq-status { cursor: pointer; }

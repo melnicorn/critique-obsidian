@@ -4,7 +4,7 @@ import { Menu, TFile, setIcon, type MarkdownPostProcessorContext } from "obsidia
 import { alignText, sourceEnd, sourceStart } from "./align";
 import { parse, threadOf, type Mark, type ParseResult, type Thread } from "./parser";
 import type CritiquePlugin from "./main";
-import { authorColor } from "./authors";
+import { authorColor, sameAuthor } from "./authors";
 import { TYPE_ICON, TYPE_LABEL } from "./ui/dom";
 import { MARK_TYPES, type MarkType } from "./syntax";
 import type { Target } from "./actions";
@@ -115,9 +115,9 @@ export class ReadingMode {
       const base = ["cq-mark", `cq-${m.type}`];
       if (thread) base.push(thread.resolved ? "cq-resolved" : "cq-threaded");
       if (m.type === "highlight" && thread) base.push("cq-anchor");
-      if (s.authorName && m.meta.author === s.authorName) base.push("cq-mine");
+      if (sameAuthor(m.meta.author, s.authorName)) base.push("cq-mine");
       const attrs: Record<string, string> = { "data-cq-id": String(m.id) };
-      const color = s.colorByAuthor ? authorColor(isCmt ? m.meta.author : thread ? parsed.marks[thread.comments[0]].meta.author : m.meta.author) : null;
+      const color = s.colorByAuthor ? authorColor(isCmt ? m.meta.author : thread ? parsed.marks[thread.comments[0]].meta.author : m.meta.author, s.authorColors) : null;
       if (color) attrs.style = `--cq-author:${color}`;
       const seg = (from: number, to: number, cls: string, extra: Partial<Segment> = {}) => {
         const rf = r(from);
@@ -223,7 +223,7 @@ export class ReadingMode {
     const chip = doc.createElement("span");
     chip.className = `cq-chip ${thread.resolved ? "cq-resolved" : ""}`.trim();
     chip.dataset.cqId = String(root.id);
-    const c = s.colorByAuthor ? authorColor(root.meta.author) : null;
+    const c = s.colorByAuthor ? authorColor(root.meta.author, s.authorColors) : null;
     if (c) chip.style.setProperty("--cq-author", c);
     setIcon(chip, "message-square");
     if (thread.comments.length > 1) chip.append(doc.createTextNode(String(thread.comments.length)));
@@ -239,7 +239,7 @@ export class ReadingMode {
       const b = tray.appendChild(doc.createElement("button"));
       b.className = `cq-tray-item cq-tray-${it.type} ${it.resolved ? "cq-resolved" : ""}`.trim();
       b.dataset.cqId = String(it.markId);
-      const c = s.colorByAuthor ? authorColor(it.author) : null;
+      const c = s.colorByAuthor ? authorColor(it.author, s.authorColors) : null;
       if (c) b.style.setProperty("--cq-author", c);
       setIcon(b, it.type === "comment" ? "message-square" : TYPE_ICON[it.type]);
       if (it.count > 1) {
@@ -301,6 +301,7 @@ export class ReadingMode {
     const section = sectionEl ? this.sections.get(sectionEl) : null;
     if (!section) return;
     const id = Number(target.dataset.cqId);
+    this.plugin.panel()?.highlightMark(id);
     if (this.hoverTimer !== null) window.clearTimeout(this.hoverTimer);
     this.plugin.threadPopovers.cancelClose();
     this.hoverTimer = window.setTimeout(() => {
@@ -315,6 +316,7 @@ export class ReadingMode {
     if (!from) return;
     const to = (ev.relatedTarget as HTMLElement | null)?.closest?.("[data-cq-id]") ?? null;
     if (to === from) return;
+    this.plugin.panel()?.highlightMark(null);
     if (this.hoverTimer !== null) {
       window.clearTimeout(this.hoverTimer);
       this.hoverTimer = null;

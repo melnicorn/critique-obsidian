@@ -19,6 +19,10 @@ export interface CritiqueSettings {
   deletionStyle: DeletionStyle;
   additionStyle: AdditionStyle;
   colorByAuthor: boolean;
+  /** Author name → CSS colour, overriding the hashed hue. */
+  authorColors: Record<string, string>;
+  /** Save a copy of the note before finalizing. */
+  finalizeBackup: boolean;
   foldMetadata: boolean;
   indicatorsEditor: boolean;
   indicatorsReading: boolean;
@@ -50,6 +54,8 @@ export const DEFAULT_SETTINGS: CritiqueSettings = {
   deletionStyle: "strike-color",
   additionStyle: "underline-color",
   colorByAuthor: true,
+  authorColors: {},
+  finalizeBackup: true,
   foldMetadata: false,
   indicatorsEditor: true,
   indicatorsReading: true,
@@ -210,6 +216,50 @@ export class CritiqueSettingTab extends PluginSettingTab {
           save();
         }),
       );
+    const authorsSetting = new Setting(containerEl).setName("Author colors").setDesc("Pin a color to an author name instead of the automatic hue. Names are matched ignoring case.");
+    authorsSetting.addButton((b) =>
+      b
+        .setButtonText("Add author")
+        .setCta()
+        .onClick(() => {
+          s.authorColors = { ...s.authorColors, "": "#888888" };
+          save();
+          this.display();
+        }),
+    );
+    for (const [name, color] of Object.entries(s.authorColors)) {
+      const row = new Setting(containerEl).setClass("cq-author-row");
+      row.addText((t) =>
+        t
+          .setPlaceholder("Author name")
+          .setValue(name)
+          .onChange((v) => {
+            const next: Record<string, string> = {};
+            for (const [k, c] of Object.entries(s.authorColors)) next[k === name ? v.trim() : k] = c;
+            s.authorColors = next;
+            save();
+          }),
+      );
+      row.addColorPicker((c) =>
+        c.setValue(color).onChange((v) => {
+          const key = Object.keys(s.authorColors).find((k) => k === name) ?? name;
+          s.authorColors = { ...s.authorColors, [key]: v };
+          save();
+        }),
+      );
+      row.addExtraButton((b) =>
+        b
+          .setIcon("trash-2")
+          .setTooltip("Remove")
+          .onClick(() => {
+            const next = { ...s.authorColors };
+            delete next[name];
+            s.authorColors = next;
+            save();
+            this.display();
+          }),
+      );
+    }
     new Setting(containerEl)
       .setName("Fold metadata in Source mode")
       .setDesc("Show the attribute prefix as a small chip until the cursor enters it.")
@@ -322,6 +372,15 @@ export class CritiqueSettingTab extends PluginSettingTab {
           save();
         }),
     );
+    new Setting(containerEl)
+      .setName("Back up before finalizing")
+      .setDesc("Finalize saves a copy of the note next to it before applying every change and removing all marks.")
+      .addToggle((t) =>
+        t.setValue(s.finalizeBackup).onChange((v) => {
+          s.finalizeBackup = v;
+          save();
+        }),
+      );
     new Setting(containerEl).setName("Confirm before deleting comments").addToggle((t) =>
       t.setValue(s.confirmDelete).onChange((v) => {
         s.confirmDelete = v;

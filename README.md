@@ -16,7 +16,11 @@ itself and works with any editor, sync tool or AI agent.
 - **Review panel.** A side panel lists every change and thread in the note. Accept, reject, reply,
   resolve, edit a comment in place, filter to changes, comments or your own marks, or accept all.
 - **Signed and timestamped.** Every mark you create carries your name and the time, so a note
-  reviewed by two people, or by you and an agent, stays readable.
+  reviewed by two people, or by you and an agent, stays readable. Pin a color per author if the
+  automatic ones don't suit.
+- **Preview the outcome.** A header button switches a note between Markup, Accepted preview and
+  Original preview without touching the file. When the review is over, Finalize applies every
+  change and removes every mark in one step, with a backup copy.
 - **Agent-friendly.** Ships with a guide (`SKILL.md`) that teaches an AI agent how to leave and
   answer review marks in your notes.
 
@@ -57,10 +61,20 @@ panel*. Each card jumps to its mark when clicked. Accept, Reject, Reply, Resolve
 straight into the note. Double-click a comment, or use its pencil, to edit it in place. The menu in
 the panel header accepts or rejects everything at once.
 
+**Previewing and finishing.** The file-diff button in the note header cycles Markup → Accepted
+preview → Original preview (also as commands). Both previews are display only and the status bar
+names the active one. When you are done, *Finalize note* accepts every change, unwraps every
+highlight, removes every comment and leaves a clean note, saving a backup copy next to it first
+(setting). The panel menu also offers *Accept all changes by <author>* when more than one author
+left changes.
+
 **Commands** also cover accept or reject at the cursor or for every change inside the selection
-(the right-click menu offers the same when the selection spans several changes), next and previous mark, resolve the thread
-at the cursor, copy the selection or note without markup, copy the note as strict CriticMarkup
-(metadata folded into comment text), and cycling the mark style.
+(the right-click menu offers the same when the selection spans several changes), next and previous
+mark, resolve the thread at the cursor, copy the selection or note without markup, copy or export
+the note as strict CriticMarkup (metadata folded into comment text), and cycling the mark style.
+
+**Panel and note stay in sync.** Hovering a mark lights up its card, hovering a card lights up its
+marks, and the card at the cursor is kept in view.
 
 **Reading mode** does all of this too: select text for the toolbar or right-click for the menu, and
 the mark is written to the file.
@@ -70,11 +84,11 @@ the mark is written to the file.
 | Group | What you can change |
 |---|---|
 | Signature | Author name, whether to add timestamps, their precision, whether edits are stamped |
-| Appearance | Colors for the four mark kinds, mark style (highlighted / dashed underline / off), tint strength, deletion and addition text styles, per-author colors, folding metadata in Source mode |
+| Appearance | Colors for the four mark kinds, mark style (highlighted / dashed underline / off), tint strength, deletion and addition text styles, per-author colors with optional pinned colors per author, folding metadata in Source mode |
 | Indicators and Reading mode | Margin indicators per mode, hiding marks in Reading mode to read the note as if everything were accepted |
 | Authoring | Selection toolbar in the editor and in Reading mode, optional comment labels (question, suggestion, …) |
 | Agents | Add a one-line guide header to reviewed notes, and the guide URL it links to |
-| Review panel and safety | Panel side, delete confirmation, stripping marks on copy |
+| Review panel and safety | Panel side, backup before Finalize, delete confirmation, stripping marks on copy |
 
 ## Working with AI agents
 

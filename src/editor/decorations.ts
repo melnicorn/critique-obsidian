@@ -4,13 +4,14 @@ import { Decoration, EditorView, WidgetType, type DecorationSet } from "@codemir
 import { editorLivePreviewField } from "obsidian";
 import { StateField } from "@codemirror/state";
 import { threadOf, type Mark, type ParseResult, type Thread } from "../parser";
-import { authorColor } from "../authors";
+import { authorColor, sameAuthor } from "../authors";
 import { parseField, settingsChanged, settingsFacet } from "./state";
 import type { CritiqueSettings } from "../settings";
 import { TYPE_ICON } from "../ui/dom";
 import { setIcon } from "obsidian";
 import { parseTimestamp, relativeTime } from "../time";
 import { findAgentHeader } from "../agent-header";
+import { previewModeField, setPreviewMode, type PreviewMode } from "./preview";
 
 export interface TrayItem {
   markId: number;
@@ -18,6 +19,7 @@ export interface TrayItem {
   count: number;
   resolved: boolean;
   author: string | null;
+  color: string | null;
 }
 
 export type TrayClickHandler = (view: EditorView, markId: number, el: HTMLElement) => void;
@@ -26,7 +28,6 @@ class TrayWidget extends WidgetType {
   constructor(
     readonly items: TrayItem[],
     readonly onClick: TrayClickHandler,
-    readonly colorByAuthor: boolean,
   ) {
     super();
   }
@@ -35,7 +36,7 @@ class TrayWidget extends WidgetType {
     if (other.items.length !== this.items.length) return false;
     return this.items.every((it, i) => {
       const o = other.items[i];
-      return it.markId === o.markId && it.type === o.type && it.count === o.count && it.resolved === o.resolved && it.author === o.author;
+      return it.markId === o.markId && it.type === o.type && it.count === o.count && it.resolved === o.resolved && it.color === o.color;
     });
   }
 
@@ -49,8 +50,7 @@ class TrayWidget extends WidgetType {
       b.className = `cq-tray-item cq-tray-${it.type} ${it.resolved ? "cq-resolved" : ""}`.trim();
       b.dataset.cqId = String(it.markId);
       b.setAttribute("aria-label", it.type === "comment" ? `${it.count} comment${it.count === 1 ? "" : "s"}` : it.type);
-      const c = this.colorByAuthor ? authorColor(it.author) : null;
-      if (c) b.style.setProperty("--cq-author", c);
+      if (it.color) b.style.setProperty("--cq-author", it.color);
       setIcon(b, it.type === "comment" ? "message-square" : TYPE_ICON[it.type]);
       if (it.count > 1) {
         const n = b.appendChild(document.createElement("span"));
@@ -95,20 +95,18 @@ class ChipWidget extends WidgetType {
     readonly markId: number,
     readonly count: number,
     readonly resolved: boolean,
-    readonly author: string | null,
-    readonly colorByAuthor: boolean,
+    readonly color: string | null,
   ) {
     super();
   }
   eq(o: ChipWidget): boolean {
-    return o.markId === this.markId && o.count === this.count && o.resolved === this.resolved && o.author === this.author;
+    return o.markId === this.markId && o.count === this.count && o.resolved === this.resolved && o.color === this.color;
   }
   toDOM(): HTMLElement {
     const s = document.createElement("span");
     s.className = `cq-chip ${this.resolved ? "cq-resolved" : ""}`.trim();
     s.dataset.cqId = String(this.markId);
-    const c = this.colorByAuthor ? authorColor(this.author) : null;
-    if (c) s.style.setProperty("--cq-author", c);
+    if (this.color) s.style.setProperty("--cq-author", this.color);
     setIcon(s, "message-square");
     if (this.count > 1) s.appendChild(document.createTextNode(String(this.count)));
     return s;
@@ -174,6 +172,7 @@ export function buildDecorations(state: EditorState, onTrayClick: TrayClickHandl
   const parsed: ParseResult = state.field(parseField);
   const s = state.facet(settingsFacet);
   const lp = state.field(editorLivePreviewField, false) ?? false;
+  const preview: PreviewMode = state.field(previewModeField, false) ?? "markup";
   const ranges: Range<Decoration>[] = [];
   const sel = state.selection.ranges;
   const touches = (from: number, to: number) => sel.some((r) => r.from <= to && r.to >= from);
@@ -186,17 +185,53 @@ export function buildDecorations(state: EditorState, onTrayClick: TrayClickHandl
     if (from < to) ranges.push(Decoration.replace({}).range(from, to));
   };
 
+  if (preview !== "markup") {
+    // Decided view: syntax, metadata and comments disappear; the losing side of each change is hidden.
+    // Kept text gets a neutral class so Obsidian's own ~~ and == styling can be cancelled.
+    const text = parsed.text;
+    const hideWhole = (m: Mark) => {
+      let from = m.from;
+      let to = m.to;
+      if (text[from - 1] === " " && text[to] === " ") to++;
+      hide(from, to);
+    };
+    for (const m of parsed.marks) {
+      if (m.type === "comment" || (m.type === "addition" && preview === "original") || (m.type === "deletion" && preview === "accepted")) {
+        hideWhole(m);
+        continue;
+      }
+      hide(m.from, m.contentFrom);
+      hide(m.contentTo, m.to);
+      if (m.type === "substitution") {
+        if (preview === "accepted") {
+          hide(m.contentFrom, m.sepFrom! + 2);
+          mark(m.sepFrom! + 2, m.contentTo, { class: "cq-keep" });
+        } else {
+          hide(m.sepFrom!, m.contentTo);
+          mark(m.contentFrom, m.sepFrom!, { class: "cq-keep" });
+        }
+      } else {
+        mark(m.contentFrom, m.contentTo, { class: "cq-keep" });
+      }
+    }
+    const h = findAgentHeader(parsed.text);
+    if (h) hide(h.from, h.to + (parsed.text[h.to] === "\n" ? 1 : 0));
+    return Decoration.set(ranges, true);
+  }
+
   for (const m of parsed.marks) {
     const thread = threadOf(parsed, m);
     const isCmt = m.type === "comment";
     const isRoot = isCmt && !!thread && thread.comments[0] === m.id;
     const anchored = isCmt && !!thread && thread.anchor !== null;
     const reveal = !lp || touches(m.from, m.to);
-    const mine = !!s.authorName && m.meta.author === s.authorName;
+    const mine = sameAuthor(m.meta.author, s.authorName);
+    const rootAuthor = thread ? parsed.marks[thread.comments[0]].meta.author : m.meta.author;
+    const authorCol = s.colorByAuthor ? authorColor(rootAuthor, s.authorColors) : null;
 
     if (isCmt && !reveal) {
       if (anchored || !isRoot) hide(m.from, m.to);
-      else ranges.push(Decoration.replace({ widget: new ChipWidget(m.id, thread!.comments.length, thread!.resolved, m.meta.author, s.colorByAuthor) }).range(m.from, m.to));
+      else ranges.push(Decoration.replace({ widget: new ChipWidget(m.id, thread!.comments.length, thread!.resolved, authorCol) }).range(m.from, m.to));
     } else {
       const cls = ["cq-mark", `cq-${m.type}`];
       if (thread) cls.push(thread.resolved ? "cq-resolved" : "cq-threaded");
@@ -204,7 +239,7 @@ export function buildDecorations(state: EditorState, onTrayClick: TrayClickHandl
       if (mine) cls.push("cq-mine");
       if (reveal) cls.push("cq-revealed");
       const attributes: Record<string, string> = { "data-cq-id": String(m.id) };
-      const color = s.colorByAuthor ? authorColor(isCmt ? m.meta.author : thread ? parsed.marks[thread.comments[0]].meta.author : m.meta.author) : null;
+      const color = s.colorByAuthor ? authorColor(isCmt ? m.meta.author : rootAuthor, s.authorColors) : null;
       if (color) attributes.style = `--cq-author:${color}`;
       mark(m.from, m.to, { class: cls.join(" "), attributes });
 
@@ -245,8 +280,7 @@ export function buildDecorations(state: EditorState, onTrayClick: TrayClickHandl
 
     if (wantsIndicator(m, thread, s)) {
       const items = trayByLine.get(m.line) ?? [];
-      const rootAuthor = thread ? parsed.marks[thread.comments[0]].meta.author : m.meta.author;
-      items.push({ markId: m.id, type: m.type, count: thread ? thread.comments.length : 1, resolved: !!thread?.resolved, author: rootAuthor });
+      items.push({ markId: m.id, type: m.type, count: thread ? thread.comments.length : 1, resolved: !!thread?.resolved, author: rootAuthor, color: authorCol });
       trayByLine.set(m.line, items);
     }
   }
@@ -260,7 +294,7 @@ export function buildDecorations(state: EditorState, onTrayClick: TrayClickHandl
   for (const [line, items] of trayByLine) {
     if (line + 1 > state.doc.lines) continue;
     const pos = state.doc.line(line + 1).from;
-    ranges.push(Decoration.widget({ widget: new TrayWidget(items, onTrayClick, s.colorByAuthor), side: -1 }).range(pos));
+    ranges.push(Decoration.widget({ widget: new TrayWidget(items, onTrayClick), side: -1 }).range(pos));
   }
 
   return Decoration.set(ranges, true);
@@ -271,7 +305,7 @@ export function decorationsField(onTrayClick: TrayClickHandler): StateField<Deco
     create: (state) => buildDecorations(state, onTrayClick),
     update: (value, tr) => {
       const lpChanged = tr.startState.field(editorLivePreviewField, false) !== tr.state.field(editorLivePreviewField, false);
-      if (tr.docChanged || tr.selection || lpChanged || tr.effects.some((e) => e.is(settingsChanged))) return buildDecorations(tr.state, onTrayClick);
+      if (tr.docChanged || tr.selection || lpChanged || tr.effects.some((e) => e.is(settingsChanged) || e.is(setPreviewMode))) return buildDecorations(tr.state, onTrayClick);
       return value;
     },
     provide: (f) => EditorView.decorations.from(f),

@@ -4,6 +4,7 @@ import { Actions } from "./actions";
 import { Authoring } from "./authoring";
 import { decorationsField } from "./editor/decorations";
 import { hoverPlugin } from "./editor/hover";
+import { cursorSync } from "./editor/cursor-sync";
 import { parseField, parsedOf, settingsChanged, settingsFacet } from "./editor/state";
 import { selectionToolbar } from "./editor/toolbar";
 import { changesInRange, plainText, stripMetadata } from "./operations";
@@ -15,6 +16,8 @@ import { MARK_TYPES, type MarkType } from "./syntax";
 import { TYPE_ICON, TYPE_LABEL } from "./ui/dom";
 import { closeAllPopovers } from "./ui/popover";
 import { stripAgentHeader } from "./agent-header";
+import { PreviewModes } from "./preview-modes";
+import { PREVIEW_LABEL, PREVIEW_MODES, previewModeField } from "./editor/preview";
 import { ThreadPopovers } from "./ui/thread-popover";
 
 export default class CritiquePlugin extends Plugin {
@@ -23,6 +26,7 @@ export default class CritiquePlugin extends Plugin {
   authoring = new Authoring(this);
   threadPopovers = new ThreadPopovers(this);
   reading = new ReadingMode(this);
+  previews = new PreviewModes(this);
   private statusEl: HTMLElement | null = null;
 
   async onload(): Promise<void> {
@@ -35,6 +39,7 @@ export default class CritiquePlugin extends Plugin {
     this.registerEditorExtension([
       settingsFacet.of(this.settings),
       parseField,
+      previewModeField,
       decorationsField((view, markId, el) => {
         const info = view.state.field(editorInfoField, false);
         this.threadPopovers.openForEditor(view, { file: info?.file ?? null, editor: info?.editor ?? null }, markId, true);
@@ -42,6 +47,7 @@ export default class CritiquePlugin extends Plugin {
       }),
       selectionToolbar(this),
       hoverPlugin(this),
+      cursorSync(this),
     ]);
 
     // Reading mode
@@ -61,7 +67,11 @@ export default class CritiquePlugin extends Plugin {
     this.registerEvent(this.app.workspace.on("active-leaf-change", () => this.updateStatus()));
     this.registerEvent(this.app.workspace.on("editor-change", () => this.updateStatus()));
     this.registerEvent(this.app.workspace.on("file-open", () => this.updateStatus()));
-    this.app.workspace.onLayoutReady(() => this.updateStatus());
+    this.app.workspace.onLayoutReady(() => {
+      this.updateStatus();
+      this.previews.attachAll();
+    });
+    this.registerEvent(this.app.workspace.on("layout-change", () => this.previews.attachAll()));
 
     // Context menu in the editor
     this.registerEvent(this.app.workspace.on("editor-menu", (menu, editor, info) => this.editorMenu(menu, editor, info)));
@@ -74,6 +84,7 @@ export default class CritiquePlugin extends Plugin {
 
   onunload(): void {
     closeAllPopovers();
+    this.previews.detachAll();
     this.reading.destroy();
     for (const cls of Array.from(document.body.classList)) if (cls.startsWith("cq-")) document.body.classList.remove(cls);
   }
@@ -129,7 +140,7 @@ export default class CritiquePlugin extends Plugin {
     return this.app.workspace.getActiveViewOfType(MarkdownView);
   }
 
-  private panel(): ReviewView | null {
+  panel(): ReviewView | null {
     const leaf = this.app.workspace.getLeavesOfType(VIEW_TYPE_REVIEW)[0];
     return leaf?.view instanceof ReviewView ? leaf.view : null;
   }
@@ -154,7 +165,7 @@ export default class CritiquePlugin extends Plugin {
     return leaf;
   }
 
-  private updateStatus(): void {
+  updateStatus(): void {
     if (!this.statusEl) return;
     const mv = this.activeMarkdown();
     if (!mv) {
@@ -163,13 +174,14 @@ export default class CritiquePlugin extends Plugin {
       return;
     }
     const c = counts(parse(mv.editor.getValue()));
-    if (!c.changes && !c.openThreads && !c.resolvedThreads && !c.highlights) {
+    const preview = this.previews.get(mv);
+    if (!c.changes && !c.openThreads && !c.resolvedThreads && !c.highlights && preview === "markup") {
       this.statusEl.setText("");
       this.statusEl.hide();
       return;
     }
     this.statusEl.show();
-    this.statusEl.setText(`✎ ${c.changes} · 💬 ${c.openThreads}`);
+    this.statusEl.setText(`✎ ${c.changes} · 💬 ${c.openThreads}${preview === "markup" ? "" : ` · ${PREVIEW_LABEL[preview]}`}`);
     this.statusEl.setAttribute("aria-label", `Critique: ${c.changes} pending change${c.changes === 1 ? "" : "s"}, ${c.openThreads} open thread${c.openThreads === 1 ? "" : "s"}. Click to open the review panel.`);
   }
 
@@ -346,6 +358,40 @@ export default class CritiquePlugin extends Plugin {
       name: "Copy note as strict CriticMarkup (no metadata)",
       editorCallback: (editor) => void this.copyStrict(parse(editor.getValue())),
     });
+
+    this.addCommand({
+      id: "finalize",
+      name: "Finalize note (accept every change, remove all marks)",
+      editorCallback: (editor, info) => void this.actions.finalize({ file: info.file ?? null, editor }),
+    });
+    this.addCommand({
+      id: "export-strict",
+      name: "Export strict CriticMarkup copy (no metadata)",
+      editorCallback: (editor, info) => void this.actions.exportStrict({ file: info.file ?? null, editor }),
+    });
+
+    this.addCommand({
+      id: "cycle-preview",
+      name: "Cycle preview: markup / accepted / original",
+      checkCallback: (checking) => {
+        const mv = this.activeMarkdown();
+        if (!mv) return false;
+        if (!checking) this.previews.cycle(mv);
+        return true;
+      },
+    });
+    for (const mode of PREVIEW_MODES) {
+      this.addCommand({
+        id: `preview-${mode}`,
+        name: `Preview: ${PREVIEW_LABEL[mode].toLowerCase()}`,
+        checkCallback: (checking) => {
+          const mv = this.activeMarkdown();
+          if (!mv) return false;
+          if (!checking) this.previews.set(mv, mode);
+          return true;
+        },
+      });
+    }
 
     this.addCommand({
       id: "insert-agent-header",

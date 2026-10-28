@@ -1,8 +1,10 @@
 // Bridges the pure operations to a file: reads the live text, rebases edits and writes them
 // through the open editor when there is one, or through the vault otherwise.
-import { Notice, TFile, type App, type Editor } from "obsidian";
+import { Notice, TFile, normalizePath, type App, type Editor } from "obsidian";
 import type { EditorView } from "@codemirror/view";
-import { parse, type Mark, type ParseResult, type Thread } from "./parser";
+import { counts, isChange, parse, type Mark, type ParseResult, type Thread } from "./parser";
+import { sameAuthor } from "./authors";
+import { stripAgentHeader } from "./agent-header";
 import * as ops from "./operations";
 import type { Attrs, Decision, Edit, InsertOptions } from "./operations";
 import { formatTimestamp } from "./time";
@@ -169,6 +171,72 @@ export class Actions {
     return ok;
   }
 
+  /** Accept or reject every change by one author. */
+  async decideAllBy(t: Target, parsed: ParseResult, decision: Decision, author: string | null): Promise<boolean> {
+    const who = author ?? "";
+    const edits = ops.decideAll(parsed.text, parsed, decision, (m) => isChange(m) && (author === null ? !m.meta.author : sameAuthor(m.meta.author, who)));
+    if (!edits.length) {
+      new Notice("Critique: no changes by that author.");
+      return false;
+    }
+    const label = author ?? "unsigned";
+    const ok = await confirm(this.app, `${decision === "accept" ? "Accept" : "Reject"} all changes by ${label}?`, `${edits.length} change${edits.length === 1 ? "" : "s"} will be ${decision === "accept" ? "accepted" : "rejected"}.`, decision === "accept" ? "Accept" : "Reject");
+    if (!ok) return false;
+    const applied = await this.apply(t, edits);
+    if (applied) await this.cleanupHeader(t);
+    return applied;
+  }
+
+  /** Apply every change, drop every highlight, comment and the agent header: the clean note, in place. */
+  async finalize(t: Target): Promise<boolean> {
+    const text = await this.readText(t);
+    if (text === null || !t.file) return false;
+    const parsed = parse(text);
+    if (!parsed.marks.length) {
+      new Notice("Critique: nothing to finalize; the note has no marks.");
+      return false;
+    }
+    const c = counts(parsed);
+    const backup = this.plugin.settings.finalizeBackup;
+    const ok = await confirm(
+      this.app,
+      "Finalize note?",
+      `Every change is accepted (${c.changes}), every highlight unwrapped (${c.highlights}) and every comment thread removed (${c.openThreads + c.resolvedThreads}), leaving a clean note. ${backup ? "A backup copy is saved next to the note first." : "No backup copy will be made."}`,
+      "Finalize",
+    );
+    if (!ok) return false;
+    if (backup) {
+      const path = await this.siblingPath(t.file, `review backup ${stamp()}`);
+      await this.app.vault.create(path, text);
+      new Notice(`Critique: backup saved as ${path.split("/").pop()}`);
+    }
+    const final = stripAgentHeader(ops.plainText(text, parsed, "accept"));
+    return this.apply(t, [{ from: 0, to: text.length, insert: final, expected: text }]);
+  }
+
+  /** Write a sibling note in strict CriticMarkup (no attribute prefixes) and open it. */
+  async exportStrict(t: Target): Promise<boolean> {
+    const text = await this.readText(t);
+    if (text === null || !t.file) return false;
+    const parsed = parse(text);
+    const out = stripAgentHeader(ops.stripMetadata(text, parsed));
+    const path = await this.siblingPath(t.file, "strict");
+    const file = await this.app.vault.create(path, out);
+    await this.app.workspace.getLeaf("tab").openFile(file);
+    new Notice(`Critique: exported ${file.basename}`);
+    return true;
+  }
+
+  private async siblingPath(file: TFile, suffix: string): Promise<string> {
+    const dir = file.parent && file.parent.path !== "/" ? file.parent.path + "/" : "";
+    let n = 0;
+    for (;;) {
+      const candidate = normalizePath(`${dir}${file.basename} (${suffix}${n ? ` ${n}` : ""}).${file.extension}`);
+      if (!(await this.app.vault.adapter.exists(candidate))) return candidate;
+      n++;
+    }
+  }
+
   async deleteComment(t: Target, parsed: ParseResult, mark: Mark): Promise<boolean> {
     if (this.plugin.settings.confirmDelete) {
       const ok = await confirm(this.app, "Delete comment?", "The comment is removed from the note.");
@@ -231,4 +299,10 @@ export class Actions {
     await navigator.clipboard.writeText(text);
     new Notice(`Critique: ${what} copied.`);
   }
+}
+
+function stamp(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}${p(d.getMinutes())}`;
 }

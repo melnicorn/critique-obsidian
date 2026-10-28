@@ -4,19 +4,29 @@ import { commentText, isChange, threadOf, type Mark, type ParseResult, type Thre
 import type { Actions, Target } from "../actions";
 import type { CritiqueSettings } from "../settings";
 import { TYPE_ICON, TYPE_LABEL, button, byline, iconButton, iconEl, quoteEl } from "./dom";
+import { sameAuthor } from "../authors";
 
-export type Item = { kind: "mark"; mark: Mark; thread: Thread | null; from: number } | { kind: "thread"; thread: Thread; from: number };
+export type Item = { kind: "mark"; mark: Mark; thread: Thread | null; from: number; to: number } | { kind: "thread"; thread: Thread; from: number; to: number };
+
+/** Every mark id an item covers: the mark itself plus its thread's comments. */
+export function itemMarkIds(item: Item): number[] {
+  const t = itemThread(item);
+  const ids = item.kind === "mark" ? [item.mark.id] : [];
+  if (t) ids.push(...t.comments);
+  return ids;
+}
 
 /** One item per change/highlight (with its rationale thread) and per standalone thread, in document order. */
 export function collectItems(parsed: ParseResult): Item[] {
   const items: Item[] = [];
   for (const m of parsed.marks) {
     if (m.type !== "comment") {
-      items.push({ kind: "mark", mark: m, thread: threadOf(parsed, m), from: m.from });
+      const t = threadOf(parsed, m);
+      items.push({ kind: "mark", mark: m, thread: t, from: m.from, to: t ? t.to : m.to });
       continue;
     }
     const t = threadOf(parsed, m);
-    if (t && t.anchor === null && t.comments[0] === m.id) items.push({ kind: "thread", thread: t, from: t.from });
+    if (t && t.anchor === null && t.comments[0] === m.id) items.push({ kind: "thread", thread: t, from: t.from, to: t.to });
   }
   return items;
 }
@@ -39,6 +49,8 @@ export interface CardHost {
   afterChange(): void;
   /** Called after the user starts/stops typing in a card, so the host can hold re-renders. */
   setBusy?(busy: boolean): void;
+  /** Called while the pointer is over a card, so the host can light up the marks in the note. */
+  hoverMarks?(ids: number[] | null): void;
 }
 
 export interface CardOptions {
@@ -53,8 +65,7 @@ function fallbackAuthor(_host: CardHost): string {
 }
 
 function isMine(host: CardHost, m: Mark): boolean {
-  const me = host.settings.authorName;
-  return !!me && m.meta.author === me;
+  return sameAuthor(m.meta.author, host.settings.authorName);
 }
 
 export function itemMatchesMine(host: CardHost, item: Item): boolean {
@@ -69,6 +80,11 @@ export function renderItem(parent: HTMLElement, item: Item, host: CardHost, opts
   const resolved = !!thread?.resolved;
   const card = parent.createDiv({ cls: `cq-card ${item.kind === "mark" ? `cq-card-${item.mark.type}` : "cq-card-thread"} ${resolved ? "cq-resolved" : ""} ${opts.compact ? "cq-compact" : ""}`.trim() });
   card.dataset.cqFrom = String(item.from);
+  card.dataset.cqIds = itemMarkIds(item).join(",");
+  if (host.hoverMarks) {
+    card.addEventListener("mouseenter", () => host.hoverMarks?.(itemMarkIds(item)));
+    card.addEventListener("mouseleave", () => host.hoverMarks?.(null));
+  }
 
   // Header
   const head = card.createDiv({ cls: "cq-card-head" });
@@ -92,7 +108,7 @@ export function renderItem(parent: HTMLElement, item: Item, host: CardHost, opts
 
   // Mark body: byline + quote
   if (item.kind === "mark") {
-    if (!asComment && (item.mark.meta.author || item.mark.meta.date)) byline(card, item.mark, fallbackAuthor(host), host.settings.colorByAuthor);
+    if (!asComment && (item.mark.meta.author || item.mark.meta.date)) byline(card, item.mark, fallbackAuthor(host), host.settings);
     quoteEl(card, item.mark);
   }
 
@@ -203,7 +219,7 @@ export function renderItem(parent: HTMLElement, item: Item, host: CardHost, opts
 
 function renderMessage(list: HTMLElement, m: Mark, host: CardHost, card: HTMLElement): void {
   const msg = list.createDiv({ cls: "cq-msg" });
-  const head = byline(msg, m, fallbackAuthor(host), host.settings.colorByAuthor);
+  const head = byline(msg, m, fallbackAuthor(host), host.settings);
   const tools = head.createSpan({ cls: "cq-msg-tools" });
   const textEl = msg.createDiv({ cls: "cq-msg-text" });
   const text = commentText(m);

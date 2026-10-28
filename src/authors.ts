@@ -6,9 +6,23 @@ export function authorHue(name: string): number {
   return h % 360;
 }
 
-export function authorColor(name: string | null | undefined): string | null {
+export function normalizeAuthor(name: string | null | undefined): string {
+  return (name ?? "").trim().toLowerCase();
+}
+
+export function sameAuthor(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normalizeAuthor(a);
+  return na !== "" && na === normalizeAuthor(b);
+}
+
+/** Stable colour for an author: a configured override when one matches, else a hashed hue. */
+export function authorColor(name: string | null | undefined, overrides?: Record<string, string>): string | null {
   if (!name) return null;
-  return `hsl(${authorHue(name)} 55% 50%)`;
+  if (overrides) {
+    const key = normalizeAuthor(name);
+    for (const [k, v] of Object.entries(overrides)) if (normalizeAuthor(k) === key && v) return v;
+  }
+  return `hsl(${authorHue(name.trim())} 55% 50%)`;
 }
 
 export function initials(name: string | null | undefined): string {

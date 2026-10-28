@@ -14,6 +14,7 @@ export function hoverPlugin(plugin: CritiquePlugin) {
         if (!target || !this.view.contentDOM.contains(target)) return;
         const id = Number(target.dataset.cqId);
         if (Number.isNaN(id)) return;
+        plugin.panel()?.highlightMark(id);
         if (this.hoveredId === id) {
           plugin.threadPopovers.cancelClose();
           return;
@@ -29,6 +30,7 @@ export function hoverPlugin(plugin: CritiquePlugin) {
         const from = (ev.target as HTMLElement).closest?.("[data-cq-id]");
         const to = (ev.relatedTarget as HTMLElement | null)?.closest?.("[data-cq-id]") ?? null;
         if (from && to === from) return;
+        plugin.panel()?.highlightMark(null);
         this.hoveredId = null;
         this.clearTimer();
         plugin.threadPopovers.scheduleClose();

@@ -4,6 +4,7 @@ import { authorColor, initials } from "../authors";
 import { fullTime, parseTimestamp, relativeTime } from "../time";
 import type { Mark } from "../parser";
 import type { MarkType } from "../syntax";
+import type { CritiqueSettings } from "../settings";
 
 export const TYPE_ICON: Record<MarkType, string> = {
   addition: "plus",
@@ -27,9 +28,9 @@ export function iconEl(parent: HTMLElement, icon: string, cls = ""): HTMLElement
   return el;
 }
 
-export function avatarEl(parent: HTMLElement, author: string | null, colorByAuthor: boolean): HTMLElement {
+export function avatarEl(parent: HTMLElement, author: string | null, settings: CritiqueSettings): HTMLElement {
   const el = parent.createSpan({ cls: "cq-avatar", text: initials(author) });
-  const c = colorByAuthor ? authorColor(author) : null;
+  const c = settings.colorByAuthor ? authorColor(author, settings.authorColors) : null;
   if (c) el.style.setProperty("--cq-author", c);
   el.setAttribute("aria-label", author ?? "Unknown author");
   return el;
@@ -51,9 +52,9 @@ export function timeEl(parent: HTMLElement, iso: string | null, edited?: string 
 }
 
 /** Author + time line used in cards and popovers. */
-export function byline(parent: HTMLElement, mark: Mark, fallbackAuthor: string, colorByAuthor: boolean): HTMLElement {
+export function byline(parent: HTMLElement, mark: Mark, fallbackAuthor: string, settings: CritiqueSettings): HTMLElement {
   const el = parent.createDiv({ cls: "cq-byline" });
-  avatarEl(el, mark.meta.author, colorByAuthor);
+  avatarEl(el, mark.meta.author, settings);
   el.createSpan({ cls: "cq-author", text: mark.meta.author ?? fallbackAuthor });
   if (mark.meta.label) el.createSpan({ cls: "cq-label", text: mark.meta.label });
   timeEl(el, mark.meta.date, mark.meta.edited);
