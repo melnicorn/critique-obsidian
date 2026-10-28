@@ -6,7 +6,7 @@ import { decorationsField } from "./editor/decorations";
 import { hoverPlugin } from "./editor/hover";
 import { parseField, parsedOf, settingsChanged, settingsFacet } from "./editor/state";
 import { selectionToolbar } from "./editor/toolbar";
-import { plainText, stripMetadata } from "./operations";
+import { changesInRange, plainText, stripMetadata } from "./operations";
 import { ReviewView, VIEW_TYPE_REVIEW } from "./panel/view";
 import { counts, isChange, markAt, parse, threadOf, type Mark, type ParseResult } from "./parser";
 import { ReadingMode } from "./reading";
@@ -228,7 +228,12 @@ export default class CritiquePlugin extends Plugin {
       if (sel.empty && type !== "comment" && type !== "addition") continue;
       add(TYPE_LABEL[type], TYPE_ICON[type], () => void this.authoring.markInEditor(cm, type as MarkType));
     }
-    if (at && isChange(at)) {
+    const inSel = sel.empty ? [] : changesInRange(parsed, sel.from, sel.to);
+    if (inSel.length > 1) {
+      if (!flat) sub.addSeparator();
+      add(`Accept ${inSel.length} changes in selection`, "check-check", () => void this.actions.decideInSelection(target, parsed, sel.from, sel.to, "accept"));
+      add(`Reject ${inSel.length} changes in selection`, "x", () => void this.actions.decideInSelection(target, parsed, sel.from, sel.to, "reject"));
+    } else if (at && isChange(at)) {
       if (!flat) sub.addSeparator();
       add("Accept change", "check", () => void this.actions.decide(target, parsed, at, "accept"));
       add("Reject change", "x", () => void this.actions.decide(target, parsed, at, "reject"));
@@ -274,6 +279,19 @@ export default class CritiquePlugin extends Plugin {
     };
     this.addCommand({ id: "accept-at-cursor", name: "Accept change at cursor", editorCheckCallback: decideAtCursor("accept") });
     this.addCommand({ id: "reject-at-cursor", name: "Reject change at cursor", editorCheckCallback: decideAtCursor("reject") });
+
+    const decideInSelection = (decision: "accept" | "reject") => (checking: boolean, editor: Editor, info: MarkdownView | MarkdownFileInfo) => {
+      const cm = this.cmOf(editor);
+      if (!cm) return false;
+      const sel = cm.state.selection.main;
+      if (sel.empty) return false;
+      const parsed = parsedOf(cm.state);
+      if (!changesInRange(parsed, sel.from, sel.to).length) return false;
+      if (!checking) void this.actions.decideInSelection({ file: info.file ?? null, editor }, parsed, sel.from, sel.to, decision);
+      return true;
+    };
+    this.addCommand({ id: "accept-in-selection", name: "Accept changes in selection", editorCheckCallback: decideInSelection("accept") });
+    this.addCommand({ id: "reject-in-selection", name: "Reject changes in selection", editorCheckCallback: decideInSelection("reject") });
 
     const decideAll = (decision: "accept" | "reject") => (editor: Editor, info: MarkdownView | MarkdownFileInfo) => {
       void this.actions.decideAll({ file: info.file ?? null, editor }, parse(editor.getValue()), decision);

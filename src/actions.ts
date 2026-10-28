@@ -158,6 +158,17 @@ export class Actions {
     return ok;
   }
 
+  async decideInSelection(t: Target, parsed: ParseResult, from: number, to: number, decision: Decision): Promise<boolean> {
+    const edits = ops.decideInRange(parsed.text, parsed, from, to, decision);
+    if (!edits.length) {
+      new Notice("Critique: no changes in the selection.");
+      return false;
+    }
+    const ok = await this.apply(t, edits);
+    if (ok) await this.cleanupHeader(t);
+    return ok;
+  }
+
   async deleteComment(t: Target, parsed: ParseResult, mark: Mark): Promise<boolean> {
     if (this.plugin.settings.confirmDelete) {
       const ok = await confirm(this.app, "Delete comment?", "The comment is removed from the note.");

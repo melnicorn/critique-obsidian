@@ -147,6 +147,19 @@ export function decideAll(doc: string, parsed: ParseResult, decision: Decision, 
   return edits;
 }
 
+/** Changes whose range overlaps [from, to]. */
+export function changesInRange(parsed: ParseResult, from: number, to: number): Mark[] {
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  return parsed.marks.filter((m) => isChange(m) && m.to > lo && m.from < hi);
+}
+
+/** Accept or reject every change overlapping a selection. Highlights and comments are left alone. */
+export function decideInRange(doc: string, parsed: ParseResult, from: number, to: number, decision: Decision): Edit[] {
+  const ids = new Set(changesInRange(parsed, from, to).map((m) => m.id));
+  return decideAll(doc, parsed, decision, (m) => ids.has(m.id));
+}
+
 /** Remove the highlight markup around a highlight, keeping its text and dropping its thread. */
 export function removeHighlight(doc: string, parsed: ParseResult, mark: Mark): Edit[] {
   if (mark.type !== "highlight") return [];

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parse } from "../src/parser";
-import { applyEdits, decideMark, decideAll, deleteComment, deleteThread, setThreadStatus, replyToThread, editComment, insertMark, plainText, stripMetadata, rebase } from "../src/operations";
+import { applyEdits, decideMark, decideAll, decideInRange, deleteComment, deleteThread, setThreadStatus, replyToThread, editComment, insertMark, plainText, stripMetadata, rebase } from "../src/operations";
 import { formatTimestamp, parseTimestamp, relativeTime } from "../src/time";
 import { decodeCommentText, encodeCommentText } from "../src/syntax";
 
@@ -145,4 +145,17 @@ test("timestamps", () => {
 test("comment encoding round trip", () => {
   const t = "a\\b\nc";
   assert.equal(decodeCommentText(encodeCommentText(t)), t);
+});
+
+test("decideInRange only touches changes overlapping the selection", () => {
+  const doc = "{++a++} one {--b--}{>>why<<} two {==h==} {++c++} three {++d++}";
+  const p = parse(doc);
+  const from = doc.indexOf("one");
+  const to = doc.indexOf("three");
+  assert.equal(applyEdits(doc, decideInRange(doc, p, from, to, "accept")), "{++a++} one two {==h==} c three {++d++}");
+  assert.equal(applyEdits(doc, decideInRange(doc, p, from, to, "reject")), "{++a++} one b two {==h==} three {++d++}");
+  // A selection that only partly covers a mark still includes it.
+  const partial = doc.indexOf("++d") + 1;
+  assert.equal(applyEdits(doc, decideInRange(doc, p, partial, doc.length, "accept")), "{++a++} one {--b--}{>>why<<} two {==h==} {++c++} three d");
+  assert.equal(decideInRange(doc, p, from, from + 2, "accept").length, 0);
 });

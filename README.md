@@ -57,7 +57,8 @@ panel*. Each card jumps to its mark when clicked. Accept, Reject, Reply, Resolve
 straight into the note. Double-click a comment, or use its pencil, to edit it in place. The menu in
 the panel header accepts or rejects everything at once.
 
-**Commands** also cover accept or reject at the cursor, next and previous mark, resolve the thread
+**Commands** also cover accept or reject at the cursor or for every change inside the selection
+(the right-click menu offers the same when the selection spans several changes), next and previous mark, resolve the thread
 at the cursor, copy the selection or note without markup, copy the note as strict CriticMarkup
 (metadata folded into comment text), and cycling the mark style.
 
