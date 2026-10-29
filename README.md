@@ -189,3 +189,13 @@ gh workflow run build.yml -R melnicorn/critique-obsidian --ref main -f build_typ
 ```
 
 Tags have no `v` prefix because Obsidian requires the tag to equal the manifest version.
+
+If Gemini fails during a release (the run shows a warning and the release gets GitHub's generated
+notes), regenerate that release's notes later without building or tagging anything:
+
+```
+gh workflow run release-notes.yml -R melnicorn/critique-obsidian -f version=0.1.3
+```
+
+Both workflows use `scripts/release-notes.sh`, which also runs locally with `GEMINI_API_KEY`,
+`VERSION`, `PREVIOUS_TAG`, `MIN_APP` and `REPO_NAME` in the environment.

@@ -14,6 +14,8 @@
 # (the agent guide) and critique-{version}.tar.gz holding all four in a critique/ folder.
 #
 # Secrets: GEMINI_API_KEY (optional) for AI release notes; without it GitHub's generated notes are used.
+# The notes themselves come from scripts/release-notes.sh, shared with release-notes.yml, which can
+# regenerate an existing release's notes after a Gemini failure.
 # Variables: GEMINI_MODEL (optional) picks the Gemini model; defaults to gemini-3.1-flash-lite.
 
 name: Build
@@ -169,100 +171,33 @@ jobs:
           git push origin "$TAG"
 
       - name: Generate release notes
+        id: notes
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # Repository variable GEMINI_MODEL overrides the model; the default applies when it is unset.
           MODEL_ID:       ${{ vars.GEMINI_MODEL || 'gemini-3.1-flash-lite' }}
+          VERSION:        ${{ needs.build.outputs.version }}
           PREVIOUS_TAG:   ${{ needs.build.outputs.previous_tag }}
-        run: |
-          set -e -E
-
-          if [ -z "$GEMINI_API_KEY" ]; then
-            echo "GEMINI_API_KEY is not set, skipping AI generation."
-            exit 0
-          fi
-
-          echo "Using Gemini model: ${MODEL_ID}"
-          GENERATE_CONTENT_API="generateContent"
-
-          if [ -z "$PREVIOUS_TAG" ]; then
-            echo "First release detected. Fetching all commits."
-            COMMITS=$(git log HEAD --no-merges --pretty=format:'%s%n%b')
-          else
-            echo "Fetching commits from ${PREVIOUS_TAG} to HEAD."
-            COMMITS=$(git log "${PREVIOUS_TAG}..HEAD" --no-merges --pretty=format:'%s%n%b')
-          fi
-
-          if [ -z "$COMMITS" ]; then
-            echo "No commits found to summarize."
-            exit 0
-          fi
-
-          PROMPT="You are a release assistant that summarizes Git commit histories into clear, human-readable release notes for an Obsidian plugin.
-
-          Guidelines:
-          - Write the first line as a succinct one-sentence title (for example, ‘Adds a review panel and fixes Reading mode selection’), then include a blank line followed by formatted release notes.
-          - Group related changes together under headers (✨ Features, 🐛 Fixes, 🧹 Maintenance).
-          - Ignore trivial commits like version bumps or formatting.
-          - Be concise and professional (5–10 short bullet points max).
-          - Do not include commit hashes, author names, or dates.
-          - Do not include any other detail than the summary (e.g., no 'here's the summary'). The only output should be the markdown that will be used as the release body.
-
-          Now summarize the following commit history:
-          ---
-          $COMMITS
-          ---"
-
-          RESPONSE=$(jq -n --arg text "$PROMPT" '{
-            contents: [{role: "user", parts: [{text: $text}]}],
-            generationConfig: {temperature: 0.7}
-          }' | curl -s -X POST \
-            -H "Content-Type: application/json" \
-            "https://generativelanguage.googleapis.com/v1beta/models/${MODEL_ID}:${GENERATE_CONTENT_API}?key=${GEMINI_API_KEY}" \
-            -d @-)
-
-          if ! echo "$RESPONSE" | jq -e . >/dev/null 2>&1; then
-            echo "❌ Invalid JSON response from Gemini API:"
-            echo "$RESPONSE"
-            exit 1
-          fi
-
-          SUMMARY=$(echo "$RESPONSE" | jq -r '.candidates[0].content.parts[0].text // empty')
-
-          if [ -z "$SUMMARY" ]; then
-            echo "❌ No summary text returned. Full response:"
-            echo "$RESPONSE"
-            # Proceed without AI notes; GitHub's generated notes are used instead.
-            exit 0
-          fi
-
-          echo "$SUMMARY" > release_notes.md
-          echo "Generated AI release notes successfully."
-
-      - name: Create GitHub release
-        env:
-          GH_TOKEN:  ${{ github.token }}
-          TAG:       ${{ needs.build.outputs.tag }}
-          VERSION:   ${{ needs.build.outputs.version }}
-          REPO_NAME: ${{ github.event.repository.name }}
+          REPO_NAME:      ${{ github.event.repository.name }}
+          HEAD_REF:       HEAD
         run: |
           set -euo pipefail
           MIN_APP=$(node -p "require('./dist/manifest.json').minAppVersion")
-          {
-            echo "## ${REPO_NAME} — v${VERSION}"
-            echo
-            echo "**Minimum Obsidian version:** ${MIN_APP}"
-            echo
-            echo "Install by unpacking \`critique-${VERSION}.tar.gz\` into \`<vault>/.obsidian/plugins/\`, or by copying \`main.js\`, \`manifest.json\` and \`styles.css\` into \`<vault>/.obsidian/plugins/critique/\`. \`SKILL.md\` is the guide for AI agents."
-            echo
-            echo "---"
-            echo
-          } > final_notes.md
+          # Not strict: a Gemini failure leaves a warning in the run and the release uses GitHub's generated notes.
+          MIN_APP="$MIN_APP" bash scripts/release-notes.sh
 
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG:      ${{ needs.build.outputs.tag }}
+          VERSION:  ${{ needs.build.outputs.version }}
+          AI:       ${{ steps.notes.outputs.ai }}
+        run: |
+          set -euo pipefail
           ASSETS=(dist/main.js dist/manifest.json dist/styles.css dist/SKILL.md "critique-${VERSION}.tar.gz")
-          if [ -f release_notes.md ]; then
-            cat release_notes.md >> final_notes.md
+          if [ "$AI" = "true" ]; then
             gh release create "$TAG" "${ASSETS[@]}" --title "v${VERSION}" --notes-file final_notes.md
           else
+            echo "::warning::No AI release notes; using GitHub's generated notes. Re-run 'Regenerate release notes' for ${VERSION} later."
             gh release create "$TAG" "${ASSETS[@]}" --title "v${VERSION}" --notes-file final_notes.md --generate-notes
           fi
