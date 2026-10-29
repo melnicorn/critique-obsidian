@@ -28,6 +28,25 @@ itself and works with any editor, sync tool or AI agent.
 
 Critique needs Obsidian 1.8 or newer.
 
+**One-line installer** (macOS and Linux; Windows via Git Bash or WSL)
+
+```bash
+curl -sS https://raw.githubusercontent.com/melnicorn/critique-obsidian/main/install.sh | bash
+```
+
+It downloads the latest release, offers to install the plugin into the vault you run it from or
+one you point it at, and then offers to install the agent skill for Claude Code, GitHub Copilot,
+OpenAI Codex, Gemini CLI and Cursor, either into a project or into your home folder. Your Critique
+settings are kept across updates. Everything can be answered up front for scripting, for example:
+
+```bash
+curl -sS https://raw.githubusercontent.com/melnicorn/critique-obsidian/main/install.sh | bash -s -- --vault ~/Notes --skill --global --agents claude,codex
+```
+
+Run it with `--help` for the full list of options (`--version`, `--no-plugin`, `--local DIR`, …).
+Then, in Obsidian, open Settings → Community plugins, enable **Critique**, and set your
+**Author name** in Settings → Critique.
+
 **From a release**
 
 1. Download `critique-<version>.tar.gz` from the
@@ -102,10 +121,20 @@ Critique ships that knowledge as `SKILL.md`, in the
 [Agent Skills](https://agentskills.io) format, so it works as both a readable guide and an
 installable skill.
 
-**Install the skill.** Copy `SKILL.md` into your agent's skills folder. For Claude Code, that is
-`.claude/skills/critique/SKILL.md` in the project, or `~/.claude/skills/critique/SKILL.md` for
-every project. The file is in the release tarball, in the plugin folder after install
-(`.obsidian/plugins/critique/SKILL.md`), and in this repository at
+**Install the skill.** The [one-line installer](#install) offers to do this, into a project
+folder or into your home folder, for any of these agents:
+
+| Agent | Project | Home |
+| --- | --- | --- |
+| Claude Code | `.claude/skills/` | `~/.claude/skills/` |
+| GitHub Copilot | `.github/skills/` | `~/.copilot/skills/` |
+| OpenAI Codex | `.agents/skills/` | `~/.agents/skills/` |
+| Gemini CLI | `.gemini/skills/` | `~/.gemini/skills/` |
+| Cursor | `.cursor/skills/` | `~/.cursor/skills/` |
+
+To do it by hand, copy `SKILL.md` into a `critique-review` folder under one of those paths, for
+example `.claude/skills/critique-review/SKILL.md`. The file is in the release tarball, in the
+plugin folder after install (`.obsidian/plugins/critique/SKILL.md`), and in this repository at
 [skills/critique/SKILL.md](skills/critique/SKILL.md).
 
 **Point agents at it from the note (optional).** Turn on *Add agent guide header to reviewed
