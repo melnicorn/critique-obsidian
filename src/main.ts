@@ -6,6 +6,7 @@ import { decorationsField } from "./editor/decorations";
 import { hoverPlugin } from "./editor/hover";
 import { cursorSync } from "./editor/cursor-sync";
 import { tableCells } from "./editor/table-cells";
+import { hostSelection } from "./editor/cell-host";
 import { parseField, parsedOf, settingsChanged, settingsFacet } from "./editor/state";
 import { selectionToolbar } from "./editor/toolbar";
 import { changesInRange, plainText, stripMetadata } from "./operations";
@@ -231,10 +232,11 @@ export default class CritiquePlugin extends Plugin {
   // ---------- Context menu ----------
 
   private editorMenu(menu: Menu, editor: Editor, info: MarkdownView | MarkdownFileInfo): void {
-    const cm = this.cmOf(editor);
-    if (!cm) return;
-    const parsed = parsedOf(cm.state);
-    const sel = cm.state.selection.main;
+    const view = this.cmOf(editor);
+    const hosted = view ? hostSelection(view) : null;
+    if (!view || !hosted) return;
+    const parsed = parsedOf(hosted.view.state);
+    const sel = { from: hosted.from, to: hosted.to, empty: hosted.from === hosted.to };
     const target = { file: info.file ?? null, editor };
     const at = markAt(parsed, sel.from);
     const thread = at ? threadOf(parsed, at) : null;
@@ -259,7 +261,7 @@ export default class CritiquePlugin extends Plugin {
       });
     for (const type of MARK_TYPES) {
       if (sel.empty && type !== "comment" && type !== "addition") continue;
-      add(TYPE_LABEL[type], TYPE_ICON[type], () => void this.authoring.markInEditor(cm, type as MarkType));
+      add(TYPE_LABEL[type], TYPE_ICON[type], () => void this.authoring.markInEditor(view, type as MarkType));
     }
     const inSel = sel.empty ? [] : changesInRange(parsed, sel.from, sel.to);
     if (inSel.length > 1) {

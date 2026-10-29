@@ -7,6 +7,7 @@ import type { MarkType } from "./syntax";
 import type CritiquePlugin from "./main";
 import { promptText, type AnchorRect } from "./ui/popover";
 import { TYPE_LABEL } from "./ui/dom";
+import { hostSelection } from "./editor/cell-host";
 
 export class Authoring {
   constructor(private plugin: CritiquePlugin) {}
@@ -30,16 +31,17 @@ export class Authoring {
     return actions.insert(target, parsed, from, to, type, {}, focus);
   }
 
-  /** Mark the main selection of a CodeMirror editor. */
+  /** Mark the main selection of a CodeMirror editor (or of a Live Preview table cell's editor). */
   async markInEditor(view: EditorView, type: MarkType): Promise<boolean> {
     const info = view.state.field(editorInfoField, false);
     const editor = info?.editor ?? null;
     const file = info?.file ?? null;
-    if (!editor) return false;
+    const hosted = hostSelection(view);
+    if (!editor || !hosted) return false;
     const sel = view.state.selection.main;
-    const parsed = this.plugin.parsedForView(view);
+    const parsed = this.plugin.parsedForView(hosted.view);
     const anchor = () => rectAt(view, sel.to) ?? rectAt(view, sel.from);
-    return this.mark({ file, editor }, parsed, sel.from, sel.to, type, anchor, view.dom.ownerDocument, true);
+    return this.mark({ file, editor }, parsed, hosted.from, hosted.to, type, anchor, view.dom.ownerDocument, true);
   }
 
   label(type: MarkType): string {

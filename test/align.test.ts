@@ -49,3 +49,26 @@ test("long input falls back without throwing", () => {
   assert.equal(m.length, src.length + 1);
   assert.equal(m[src.length], out.length);
 });
+
+test("padded wide table maps a selection inside a cell", () => {
+  const pad = (s: string, n: number) => s + " ".repeat(Math.max(0, n - s.length));
+  const cells = [
+    ["#", "Consequat", "Velit"],
+    ["D1", "**Esse cillum dolore.** Pariatur `natus.error` sint.", "Accusantium doloremque laudantium."],
+    ["D2", "Magni dolores eos qui ratione.", "Neque porro quisquam est."],
+    ["D3", "Quis autem vel eum iure.", "Excepturi sint occaecat cupiditate esse cillum."],
+  ];
+  const w = 320;
+  const row = (r: string[]) => `| ${r.map((c) => pad(c, w)).join(" | ")} |`;
+  const lines = [row(cells[0]), `| ${["-".repeat(w), "-".repeat(w), "-".repeat(w)].join(" | ")} |`];
+  for (let i = 1; i < 30; i++) lines.push(row(cells[1 + (i % 3)]));
+  const src = lines.join("\n");
+  const plain = (c: string) => c.replace(/\*\*|`/g, "");
+  const out = [cells[0], ...Array.from({ length: 29 }, (_, i) => cells[1 + ((i + 1) % 3)])].map((r) => r.map(plain).join("")).join("");
+  const m = alignText(src, out);
+  const rs = out.indexOf("cillum");
+  const from = sourceStart(m, rs);
+  const to = sourceEnd(m, rs + "cillum".length);
+  assert.equal(src.slice(from, to), "cillum");
+  assert.equal(from, src.indexOf("cillum"));
+});

@@ -12,6 +12,7 @@ import type { MarkType } from "./syntax";
 import type CritiquePlugin from "./main";
 import { confirm } from "./ui/confirm";
 import { hasAgentHeader, insertAgentHeader, removeAgentHeader } from "./agent-header";
+import { openCell } from "./editor/cell-host";
 
 export interface Target {
   file: TFile | null;
@@ -78,12 +79,20 @@ export class Actions {
       const delta = rebased[0].from - edits[0].from;
       const cm = cmOf(editor);
       if (cm) {
-        const spec: Parameters<EditorView["dispatch"]>[0] = { changes: rebased.map((e) => ({ from: e.from, to: e.to, insert: e.insert })) };
-        if (after.select) spec.selection = { anchor: after.select.from + delta, head: after.select.to + delta };
-        else if (after.cursor !== undefined) spec.selection = { anchor: after.cursor + delta };
+        // While a Live Preview table cell is being edited, Obsidian drops changes to that table made
+        // through the note's editor. Edits that fall inside the cell go through the cell's editor.
+        const cell = openCell(cm);
+        const inCell = !!cell && rebased.every((e) => e.from >= cell.offset && e.to <= cell.offset + cell.view.state.doc.length);
+        const view = inCell ? cell!.view : cm;
+        const shift = inCell ? cell!.offset : 0;
+        const spec: Parameters<EditorView["dispatch"]>[0] = { changes: rebased.map((e) => ({ from: e.from - shift, to: e.to - shift, insert: e.insert })) };
+        if (after.select) spec.selection = { anchor: after.select.from + delta - shift, head: after.select.to + delta - shift };
+        else if (after.cursor !== undefined) spec.selection = { anchor: after.cursor + delta - shift };
         spec.scrollIntoView = after.focus === true;
-        cm.dispatch(spec);
-        if (after.focus) cm.focus();
+        const before = view.state.doc;
+        view.dispatch(spec);
+        if (view.state.doc === before) return fail();
+        if (after.focus) view.focus();
       } else {
         editor.transaction({ changes: rebased.map((e) => ({ from: editor.offsetToPos(e.from), to: editor.offsetToPos(e.to), text: e.insert })) });
         if (after.select) editor.setSelection(editor.offsetToPos(after.select.from + delta), editor.offsetToPos(after.select.to + delta));

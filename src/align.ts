@@ -8,6 +8,30 @@
  * map[src.length] === out.length. The array is non-decreasing.
  */
 export function alignText(src: string, out: string): Int32Array {
+  // Padded tables carry thousands of spaces and dashes that never render, which would push the
+  // diff past its cap. Keep only the first and last char of each long run, align that, then expand.
+  const kept: number[] = [];
+  let reduced = "";
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if ((c === " " || c === "\t" || c === "-") && i > 0 && src[i - 1] === c && i + 1 < src.length && src[i + 1] === c) continue;
+    kept.push(i);
+    reduced += c;
+  }
+  if (kept.length === src.length) return alignCore(src, out);
+  const rmap = alignCore(reduced, out);
+  const map = new Int32Array(src.length + 1);
+  let k = kept.length;
+  map[src.length] = rmap[k];
+  // A dropped char takes the rendered offset of the next kept char, as an unrendered char would.
+  for (let i = src.length - 1; i >= 0; i--) {
+    if (k > 0 && kept[k - 1] === i) k--;
+    map[i] = rmap[k];
+  }
+  return map;
+}
+
+function alignCore(src: string, out: string): Int32Array {
   const N = src.length;
   const M = out.length;
   const map = new Int32Array(N + 1);
