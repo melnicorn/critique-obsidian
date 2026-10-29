@@ -237,7 +237,8 @@ export default class CritiquePlugin extends Plugin {
     if (!view || !hosted) return;
     const parsed = parsedOf(hosted.view.state);
     const sel = { from: hosted.from, to: hosted.to, empty: hosted.from === hosted.to };
-    const target = { file: info.file ?? null, editor };
+    // Inside a Live Preview table cell, `editor` is scoped to the cell; write through the note's editor.
+    const target = { file: info.file ?? null, editor: hosted.view.state.field(editorInfoField, false)?.editor ?? editor };
     const at = markAt(parsed, sel.from);
     const thread = at ? threadOf(parsed, at) : null;
 
